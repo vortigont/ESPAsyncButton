@@ -119,10 +119,6 @@ class InterruptButton {
     void disableEvent(event_t event);
     bool eventEnabled(event_t event);
 
-
-    //bool syncEventsEnabled = true,  asyncEventsEnabled = true;
-    //bool longPressEnabled = false,  autoRepeatEnabled = false,  doubleClickEnabled = false;
-
     void      setLongPressInterval(uint16_t intervalMS);              // Updates LongPress Interval
     uint16_t  getLongPressInterval(void);
     void      setAutoRepeatInterval(uint16_t intervalMS);             // Updates autoRepeat Interval
@@ -135,20 +131,10 @@ class InterruptButton {
     // Any functions bound to Asynchronous (ISR driven) events should be defined with IRAM_ATTR attribute and be as brief as possible
     // Any functions bound to Synchronous events (Actioned by loop call of "button.processSyncEvents()") may be longer and also may be defined as Lambda functions
 
-    void bind(  event_t event, btn_callback_t action);                      // Used to bind/unbind action to an event at current m_menuLevel
-    void unbind(event_t event);
     void bind(  event_t event, uint8_t menuLevel, btn_callback_t action);   // Used to bind/unbind action to an event at specified menu level
+    inline void bind(  event_t event, btn_callback_t action){ bind(event, m_menuLevel, action); }    // Used to bind/unbind action to an event at current m_menuLevel
     void unbind(event_t event, uint8_t menuLevel);
-    //void action(event_t event);                         // Helper function to simplify calling actions at current m_menulevel (good for async)
-    //void action(event_t event, uint8_t menuLevel);      // Helper function to simplify calling actions at specified menulevel (req'd for sync)
-
-    // For processing Synchronous events.
-    volatile bool keyPressOccurred = false;
-    volatile bool longKeyPressOccurred = false;
-    volatile bool autoRepeatPressOccurred = false;
-    volatile bool doubleClickOccurred = false;
-    bool inputOccurred(void);                                         // Used as a simple test if there was ANY action on button, ie if polling.
-    void processSyncEvents(void){};                                     // Used to action any Synchronous events recorded.
+    inline void unbind(event_t event){ unbind(event, m_menuLevel); };
 };
 
 #endif

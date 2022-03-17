@@ -37,8 +37,7 @@ void menu1Button2doubleClick(void);
 
 //-- BUTTON VARIABLES -----------------------------------------
 InterruptButton button1(BUTTON_1, LOW);
-//InterruptButton button2(BUTTON_2, LOW);
-InterruptButton* button2;
+InterruptButton* button2;   // object placeholder
 
 //== MAIN SETUP FUNCTION ===========================================================================
 //==================================================================================================
@@ -50,9 +49,7 @@ void setup() {
   button2 = new InterruptButton(BUTTON_2, LOW);
 
   // SETUP THE BUTTONS -----------------------------------------------------------------------------
-  //InterruptButton::setMenuCount(numMenus);
-  //InterruptButton::setMenuLevel(0);
-  button1.begin();      //button2.begin();
+  button1.begin();
   button2->begin();
 
   button1.setDoubleClickInterval(350);
@@ -104,12 +101,6 @@ void setup() {
   button2->bind(event_t::AutoRepeatPress, 1, [](){ Serial.printf("Menu 1, Button 2: AutoRepeat Press :     [%lu ms]\n", millis()); });  
   //button2.bind(InterruptButton::SyncDoubleClick,  1, [](){ Serial.printf("Menu 1, Button 2: SYNC DoubleClick:           [%lu ms]\n", millis()); });  
 
-  //Clear any spurious clicks made during setup so we start fresh in the main loop.
-  //button1.clearSyncInputs(); button2.clearSyncInputs();
-  //InterruptButton::setMenuLevel(0); 
-
-  // start Button event handler
-  startBtnTask();
 }
 
 //== INTERRUPT SERVICE ROUTINES ====================================================================
@@ -123,7 +114,6 @@ void IRAM_ATTR menu0Button1autoRepeatPress(void) { Serial.printf("Menu 0, Button
 void IRAM_ATTR menu0Button1doubleClick(void)  {
   Serial.printf("Menu 0, Button 1:  Double Click:          %lu ms - Disabling Sync events and changing to Menu Level ", millis());
   //button1.disableEvent(event_t::SyncEvents); button2.disableEvent(event_t::SyncEvents); 
-  //InterruptButton::setMenuLevel(1);
   button1.setMenuLevel(1);
   Serial.println(button1.getMenuLevel());
 } 
@@ -135,7 +125,6 @@ void IRAM_ATTR menu1Button1longKeyPress(void)    { Serial.printf("Menu 1, Button
 void IRAM_ATTR menu1Button1autoRepeatPress(void) { Serial.printf("Menu 1, Button 1:  Auto Repeat Key Press: %lu ms\n", millis()); }     
 void IRAM_ATTR menu1Button1doubleClick(void)  { 
   Serial.printf("Menu 1, Button 1:  Double Click:          %lu ms - Changing Back to Menu Level ", millis());
-  //InterruptButton::setMenuLevel(0);
   button1.setMenuLevel(0);
   Serial.println(button1.getMenuLevel());
 } 
@@ -149,7 +138,6 @@ void IRAM_ATTR menu0Button2autoRepeatPress(void) { Serial.printf("Menu 0, Button
 void IRAM_ATTR menu0Button2doubleClick(void)  { 
   Serial.printf("Menu 0, Button 2:  Double Click:          %lu ms - Enabling Sync events and changing to Menu Level ", millis());
   //button1.enableEvent(event_t::SyncEvents); button2->enableEvent(event_t::SyncEvents); 
-  //InterruptButton::setMenuLevel(1);
   button2->setMenuLevel(1);
   Serial.println(button1.getMenuLevel());
 } 
@@ -159,14 +147,12 @@ void IRAM_ATTR menu1Button2keyUp(void)           { Serial.printf("Menu 1, Button
 void IRAM_ATTR menu1Button2keyPress(void)        { Serial.printf("Menu 1, Button 2:  Key Press:             %lu ms\n", millis()); }            
 void IRAM_ATTR menu1Button2longKeyPress(void) { 
   Serial.printf("Menu 1, Button 2:  Long Press:            %lu ms - [NOTE FASTER KEYPRESS RESPONSE IF DOUBLECLICK NOT DEFINED] Changing Back to Menu Level ", millis());
-  //InterruptButton::setMenuLevel(0);
   button2->setMenuLevel(0);
   Serial.println(button2->getMenuLevel());
  }
 void IRAM_ATTR menu1Button2autoRepeatPress(void) { Serial.printf("Menu 1, Button 2:  Auto Repeat Key Press: %lu ms\n", millis()); }     
 void IRAM_ATTR menu1Button2doubleClick(void) { 
   Serial.print("Menu 1, Button 2:  Double Click - Changing Back to Menu Level ");
-  //InterruptButton::setMenuLevel(0);
   button2->setMenuLevel(0);
   Serial.println(button2->getMenuLevel());
 }

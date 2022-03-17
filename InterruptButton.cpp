@@ -50,9 +50,9 @@ void actionsTask(void* pvParams){
 
   for (;;){
     if (xQueueReceive(q_action, (void*)&t, (portTickType)portMAX_DELAY)) {
-      for (auto i = btn_actions.cbegin(); i != btn_actions.cend(); ++i){    // search for registered callback function
-        if (i->t == t){                                                     // execute callback if btntrigger_t matches the one provided via Q
-          i->cb();
+      for (const auto& i : btn_actions){                                   // search for registered callback functions
+        if (i.t == t){                                                     // execute callback if btntrigger_t matches the one provided via Q
+          i.cb();
           break;
         }
       }
@@ -63,8 +63,8 @@ void actionsTask(void* pvParams){
 
 
 bool startBtnTask(){
-  if (!q_action)
-     getActionQ();
+  if (!getActionQ())
+    return false;
 
   if (!t_action)
       return xTaskCreate(actionsTask, EVT_TASK_NAME, EVT_TASK_STACK, NULL, EVT_TASK_PRIO, &t_action) == pdPASS;
@@ -73,8 +73,15 @@ bool startBtnTask(){
 }
 
 void stopBtnTask(){
-  if (t_action)
+  if (t_action){
     vTaskDelete(t_action);
+    t_action = nullptr;    
+  }
+
+  if (q_action){
+    vQueueDelete(q_action);
+    q_action = nullptr;
+  }
 }
 
 
@@ -85,6 +92,9 @@ void stopBtnTask(){
 
 //-- Method to monitor button, called by button change and various timer interrupts ----------------------
 void IRAM_ATTR InterruptButton::readButton(void *arg){
+  if (!q_action)    // quit if no Q
+    return;
+
   InterruptButton* btn = static_cast<InterruptButton*>(arg);
 
   BaseType_t xCntxSwitch = pdFALSE;
@@ -116,7 +126,7 @@ void IRAM_ATTR InterruptButton::readButton(void *arg){
     case Pressing:                                                            // VALID KEYDOWN, assumed pressed if it had valid polls more than half the time
       //btn->action(event_t::KeyDown);                                                   // Fire the asynchronous keyDown event
       t.event = event_t::KeyDown;
-      xQueueSendToBackFromISR(*getActionQ(), &t, &xCntxSwitch);
+      xQueueSendToBackFromISR(q_action, &t, &xCntxSwitch);
       if(btn->m_stateDblClick == DblClickIdle){                               // If not waiting for a double click or timing out, Commence longKeyPress / Autopress timers
         startTimer(btn->m_buttonLPandRepeatTimer, uint64_t(btn->m_longKeyPressMS * 1000), &InterruptButton::longPressEvent, btn, "CP1_");
       }
@@ -153,7 +163,7 @@ void IRAM_ATTR InterruptButton::readButton(void *arg){
     case Releasing:
       killTimer(btn->m_buttonLPandRepeatTimer);
       t.event = event_t::KeyUp;
-      xQueueSendToBackFromISR(*getActionQ(), &t, &xCntxSwitch);
+      xQueueSendToBackFromISR(q_action, &t, &xCntxSwitch);
 
       // If double-clicks are enabled and either defined
       if(btn->eventEnabled(event_t::DoubleClick) ) {
@@ -165,13 +175,11 @@ void IRAM_ATTR InterruptButton::readButton(void *arg){
           killTimer(btn->m_buttonDoubleClickTimer);
           btn->m_stateDblClick = DblClickIdle;
           t.event = event_t::DoubleClick;
-          xQueueSendToBackFromISR(*getActionQ(), &t, &xCntxSwitch);
+          xQueueSendToBackFromISR(q_action, &t, &xCntxSwitch);
         }
       } else if(!btn->m_longPress_preventKeyPress) {                                      // Otherwise, treat as a basic keyPress
-        //btn->action(event_t::KeyPress);                                                   // Then treat as a normal keyPress
-        //btn->keyPressOccurred = true; btn->m_keyPressMenuLevel = m_menuLevel;
         t.event = event_t::KeyPress;
-        xQueueSendToBackFromISR(*getActionQ(), &t, &xCntxSwitch);
+        xQueueSendToBackFromISR(q_action, &t, &xCntxSwitch);
       } 
       btn->m_state = Released;
       gpio_intr_enable(btn->m_pin);
@@ -185,6 +193,9 @@ void IRAM_ATTR InterruptButton::readButton(void *arg){
 
 //-- Method to handle longKeyPresses (called by timer)----------------------------------------------------
 void InterruptButton::longPressEvent(void *arg){
+  if (!q_action)
+    return;
+
   InterruptButton* btn = static_cast<InterruptButton*>(arg);
 
     btntrigger_t t = { btn->m_pin, btn->m_menuLevel, event_t::LongKeyPress};
@@ -195,11 +206,14 @@ void InterruptButton::longPressEvent(void *arg){
       startTimer(btn->m_buttonLPandRepeatTimer, uint64_t(btn->m_autoRepeatMS * 1000), &InterruptButton::autoRepeatPressEvent, btn, "LPD_");
     }
 
-    xQueueSendToBack(*getActionQ(), (void*)&t, (TickType_t)0);
+    xQueueSendToBack(q_action, (void*)&t, (TickType_t)0);
 }
 
 //-- Method to handle autoRepeatPresses (called by timer)-------------------------------------------------
 void InterruptButton::autoRepeatPressEvent(void *arg){
+  if (!q_action)
+    return;
+
   InterruptButton* btn = static_cast<InterruptButton*>(arg);
 
   btntrigger_t t = { btn->m_pin, btn->m_menuLevel, event_t::KeyPress};
@@ -208,20 +222,20 @@ void InterruptButton::autoRepeatPressEvent(void *arg){
     t.event = event_t::AutoRepeatPress;
   }
 
-  //btn->autoRepeatPressOccurred = true; btn->m_autoRepeatPressMenuLevel = m_menuLevel; // Setup for Sync AutoRepeatePress Event
   if(gpio_get_level(btn->m_pin) == btn->m_pressedState) {                             // Sanity check to stop autorepeats in case we somehow missed button release
     startTimer(btn->m_buttonLPandRepeatTimer, uint64_t(btn->m_autoRepeatMS * 1000), &InterruptButton::autoRepeatPressEvent, btn, "ARPE_");
   }
-  xQueueSendToBack(*getActionQ(), (void*)&t, (TickType_t)0);
+  xQueueSendToBack(q_action, (void*)&t, (TickType_t)0);
 }
 
 //-- Method to return to interpret previous keyUp as a keyPress instead of a doubleClick if it times out.
 void InterruptButton::doubleClickTimeout(void *arg){
+  if (!q_action)
+    return;
+
   InterruptButton* btn = reinterpret_cast<InterruptButton*>(arg);
   btntrigger_t t = { btn->m_pin, btn->m_menuLevel, event_t::KeyPress};
-  xQueueSendToBack(*getActionQ(), (void*)&t, (TickType_t)0);
-  //btn->action(event_t::KeyPress);                                                  // Then treat as a normal keyPress
-  //btn->keyPressOccurred = true; btn->m_keyPressMenuLevel = m_menuLevel;   // Note, this timer is never started if previous press was a longpress
+  xQueueSendToBack(q_action, (void*)&t, (TickType_t)0);
   btn->m_stateDblClick = DblClickIdle;
 }
 
@@ -287,16 +301,8 @@ InterruptButton::~InterruptButton() {
 
 // Initialiser -------------------------------------------------------------------
 void InterruptButton::begin(void){
-    //if(!m_firstButtonInitialised) m_firstButtonInitialised = true;
-/*
-    eventActions = new func_ptr*[m_numMenus];
-    for(int menu = 0; menu < m_numMenus; menu++){
-      eventActions[menu] = new func_ptr[event_t::NumEventTypes];
-      for(int evt = 0; evt < static_cast<uint8_t>(event_t::NumEventTypes); evt++){
-        eventActions[menu][evt] = nullptr;
-      }
-    }
-*/
+    startBtnTask();             // enshure we have a Q to work on and event consumer Task
+
     gpio_config_t gpio_conf = {};
       gpio_conf.mode = m_pinMode;
       gpio_conf.pin_bit_mask = BIT64(m_pin);
@@ -326,10 +332,6 @@ uint16_t  InterruptButton::getDoubleClickInterval(void)                 { return
 // -- FUNCTIONS RELATED TO EXTERNAL ACTIONS --------------------------------------------------------------
 // -------------------------------------------------------------------------------------------------------
 
-void InterruptButton::bind(event_t event, btn_callback_t action){
-  bind(event, m_menuLevel, action);
-}
-
 /*
 void InterruptButton::bind(event_t event, uint8_t menuLevel, func_ptr action){
   if(!m_firstButtonInitialised){
@@ -356,24 +358,6 @@ void InterruptButton::bind(event_t event, uint8_t menuLevel, btn_callback_t acti
   }
 }
 
-void InterruptButton::unbind(event_t event){
-  unbind(event, m_menuLevel);
-}
-/*
-void InterruptButton::unbind(event_t event, uint8_t menuLevel){
-  if(!m_firstButtonInitialised){
-    ESP_LOGE(TAG, "You must call the 'begin()' function prior to unbinding external fuctions from a button!");
-  } else if(menuLevel >= m_numMenus) {
-    ESP_LOGE(TAG, "Specified menu level is greater than the number of menus!");
-  } else if(event >= event_t::NumEventTypes) {
-    ESP_LOGE(TAG, "Specified event is invalid!");
-  } else {
-    eventActions[menuLevel][static_cast<uint8_t>(event)] = nullptr;
-    if(eventEnabled(event)) disableEvent(event);
-  }
-  return;
-}
-*/
 void InterruptButton::unbind(event_t event, uint8_t menuLevel){
   if (!btn_actions.size())    // action list is empty
     return;
@@ -425,34 +409,6 @@ uint8_t   InterruptButton::getMenuLevel(){
   return m_menuLevel;
 }
 
-
-//-- SYNCHRONOUS EVENT ROUTINES --------------------------------------------------------------------------
-bool InterruptButton::inputOccurred(void){
-  return (keyPressOccurred || longKeyPressOccurred || autoRepeatPressOccurred || doubleClickOccurred); 
-}
-/*
-void InterruptButton::clearSyncInputs(void){
-  keyPressOccurred = false; longKeyPressOccurred = false; autoRepeatPressOccurred = false; doubleClickOccurred = false;
-}
-
-void InterruptButton::processSyncEvents(void){
-  if(eventEnabled(event_t::SyncEvents)){
-    if(keyPressOccurred) {
-      action(event_t::SyncKeyPress, m_keyPressMenuLevel);                            keyPressOccurred = false; 
-    }        
-    if(longKeyPressOccurred){
-      action(event_t::SyncLongKeyPress, m_longKeyPressMenuLevel);                    longKeyPressOccurred = false; 
-    }
-    if(autoRepeatPressOccurred){
-      event_t event = (eventActions[m_autoRepeatPressMenuLevel][static_cast<uint8_t>(event_t::SyncAutoKeyPress)]) ? event_t::SyncAutoKeyPress : event_t::SyncKeyPress;
-      action(event, m_autoRepeatPressMenuLevel);                            autoRepeatPressOccurred = false;
-    }
-    if(doubleClickOccurred){
-      action(event_t::SyncDoubleClick, m_doubleClickMenuLevel);                      doubleClickOccurred = false; 
-    }
-  }
-}
-*/
 
 void InterruptButton::unbindall(){
   if (!btn_actions.size())    // action list is empty
