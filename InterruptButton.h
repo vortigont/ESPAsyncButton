@@ -14,13 +14,8 @@ enum class event_t:uint8_t {
   LongKeyPress, 
   AutoRepeatPress, 
   DoubleClick, 
-  SyncKeyPress,         // Sycnchronous events are actioned inside of main loop at button.processSyncEvents() ...
-  SyncLongKeyPress,     // ... and can be defined as Lambdas
-  SyncAutoKeyPress, 
-  SyncDoubleClick,
   NumEventTypes,         // Not an event, but this value used to size the number of columns in event/action array.
-  AsyncEvents,
-  SyncEvents
+  AsyncEvents
 };
 
 
@@ -38,7 +33,19 @@ struct btnaction_t {
   btn_callback_t cb;
 };
 
-bool startBtnActions();
+/**
+ * @brief run Button event queue task
+ * 
+ * @return true on success
+ * @return false of error
+ */
+bool startBtnTask();
+
+/**
+ * @brief stop Button event queue task
+ * 
+ */
+void stopBtnTask();
 
 // -- Interrupt Button and Debouncer ---------------------------------------------------------------------------------------
 // -- ----------------------------------------------------------------------------------------------------------------------
@@ -56,9 +63,6 @@ class InterruptButton {
       DblClickTimeout
     };
 
-    typedef void (*func_ptr)(void);       // Type def to faciliate managine pointers to external action functions
-
-
     // Static class members shared by all instances of this object (common across all instances of the class)
     // ------------------------------------------------------------------------------------------------------
     static void readButton(void* arg);                                      // Static function to read button state (must be static to bind to GPIO and timer ISR)
@@ -69,33 +73,27 @@ class InterruptButton {
     static void killTimer(esp_timer_handle_t &timer);                       // Helper function to kill a timer
 
     static const uint8_t m_targetPolls = 10;                                // Desired number of polls required to debounce a button
-    //static bool m_firstButtonInitialised;                                   // Used to block any further changes to m_numMenus
-    //static uint8_t m_numMenus;                                              // Total number of menu sets, can be set by user, but only before initialising first button
 
     // Non-static instance specific member declarations
     // ------------------------------------------------
     uint8_t m_menuLevel = 0;                                                // Current menulevel for all buttons (global in class so common across all buttons)
     volatile pinState_t m_state, m_stateDblClick = DblClickIdle;            // Instance specific state machine variable (intialised when intialising button)
-    esp_timer_handle_t m_buttonPollTimer;                                   // Instance specific timer for button debouncing
-    esp_timer_handle_t m_buttonLPandRepeatTimer;                            // Instance specific timer for button longPress and autoRepeat timing
-    esp_timer_handle_t m_buttonDoubleClickTimer;                            // Instance specific timer for policing double-clicks
+    esp_timer_handle_t m_buttonPollTimer = nullptr;                         // Instance specific timer for button debouncing
+    esp_timer_handle_t m_buttonLPandRepeatTimer = nullptr;                  // Instance specific timer for button longPress and autoRepeat timing
+    esp_timer_handle_t m_buttonDoubleClickTimer = nullptr;                  // Instance specific timer for policing double-clicks
 
     uint8_t m_pressedState;                                                 // State of button when it is pressed (LOW or HIGH)
     gpio_num_t m_pin;                                                       // Button gpio
     gpio_mode_t m_pinMode;                                                  // GPIO mode: IDF's input/output mode
 
-    //volatile uint8_t m_keyPressMenuLevel, m_longKeyPressMenuLevel,          // Variables to store current menulevel when event occurs (the menu level ...
-    //                 m_autoRepeatPressMenuLevel, m_doubleClickMenuLevel;    // ... may have been changed by time sync event called in main loop))
     uint16_t m_pollIntervalUS, m_longKeyPressMS, m_autoRepeatMS,            // Timing variables
              m_doubleClickMS;
      
     volatile bool m_longPress_preventKeyPress;                              // Boolean flag to prevent firing a keypress if a long press occurred (outside of polling fuction)
     volatile uint16_t m_validPolls = 0, m_totalPolls = 0;                   // Variables to conduct debouncing algoritm
 
-    //func_ptr** eventActions = nullptr;                                      // Pointer to 2D array, event actions by row, menu levels by column.
-    uint16_t eventMask = 0b1100001000111;   // Default to keyUp, keyDown, and keyPress enabled (sync an async)
+    uint16_t eventMask = 0b10000111;        // Default to keyUp, keyDown, and keyPress enabled
                                             // When binding functions, longKeyPress, autoKeyPresses, and double clicks are automatically enabled.
-    bool repeat_actions = false;            // a flag means that instance has dedicated repat actions assigned
 
     /**
      * @brief remove all action bindings
@@ -106,8 +104,6 @@ class InterruptButton {
 
   public:
     // Static class members shared by all instances of this object -----------------------
-    //static void    setMenuCount(uint8_t numberOfMenus);               // Sets number of menus/pages that each button has (can only be done before intialising first button)
-    //static uint8_t getMenuCount(void);                                // Retrieves total number of menus.
     void    setMenuLevel(uint8_t level);                       // Sets menu level across all buttons (ie buttons mean something different each page)
     uint8_t getMenuLevel();                                    // Retrieves menu level
 
@@ -152,7 +148,6 @@ class InterruptButton {
     volatile bool autoRepeatPressOccurred = false;
     volatile bool doubleClickOccurred = false;
     bool inputOccurred(void);                                         // Used as a simple test if there was ANY action on button, ie if polling.
-    //void clearSyncInputs(void);                                           // Resets all Syncronous events flags
     void processSyncEvents(void){};                                     // Used to action any Synchronous events recorded.
 };
 
