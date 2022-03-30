@@ -1,9 +1,13 @@
-#ifndef InterruptButton_h
-#define InterruptButton_h
+#pragma once
 
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include <functional>     // Necessary to use std::bind to bind arguments to ISR in attachInterrupt()
+
+#define IBTN_LONG_PRESS_TIME_MS     750
+#define IBTN_AUTO_REPEAT_TIME_MS    250
+#define IBTN_DOUBLE_CLICK_TIME_MS   350
+#define IBTN_DEBOUNCE_TIME_US       8000
 
 typedef std::function<void ()> btn_callback_t;
 
@@ -18,9 +22,20 @@ enum class event_t:uint8_t {
   AsyncEvents
 };
 
+enum class pinState_t:uint8_t {                     // Enumeration to assist with program flow at state machine for reading button
+  Released, 
+  ConfirmingPress,
+  Pressing,
+  Pressed, 
+  WaitingForRelease,
+  Releasing,
+  DblClickIdle,
+  DblClickWaiting,
+  DblClickTimeout
+};
 
-struct btntrigger_t
-{
+
+struct btntrigger_t {
   gpio_num_t gpio;
   uint8_t menulvl;
   event_t event;
@@ -51,17 +66,6 @@ void stopBtnTask();
 // -- ----------------------------------------------------------------------------------------------------------------------
 class InterruptButton {
   private:
-    enum pinState_t {                     // Enumeration to assist with program flow at state machine for reading button
-      Released, 
-      ConfirmingPress,
-      Pressing,
-      Pressed, 
-      WaitingForRelease,
-      Releasing,
-      DblClickIdle,
-      DblClickWaiting,
-      DblClickTimeout
-    };
 
     // Static class members shared by all instances of this object (common across all instances of the class)
     // ------------------------------------------------------------------------------------------------------
@@ -77,7 +81,8 @@ class InterruptButton {
     // Non-static instance specific member declarations
     // ------------------------------------------------
     uint8_t m_menuLevel = 0;                                                // Current menulevel for all buttons (global in class so common across all buttons)
-    volatile pinState_t m_state, m_stateDblClick = DblClickIdle;            // Instance specific state machine variable (intialised when intialising button)
+    volatile pinState_t m_state = pinState_t::Released;
+    volatile pinState_t m_stateDblClick = pinState_t::DblClickIdle;         // Instance specific state machine variable (intialised when intialising button)
     esp_timer_handle_t m_buttonPollTimer = nullptr;                         // Instance specific timer for button debouncing
     esp_timer_handle_t m_buttonLPandRepeatTimer = nullptr;                  // Instance specific timer for button longPress and autoRepeat timing
     esp_timer_handle_t m_buttonDoubleClickTimer = nullptr;                  // Instance specific timer for policing double-clicks
@@ -86,8 +91,10 @@ class InterruptButton {
     gpio_num_t m_pin;                                                       // Button gpio
     gpio_mode_t m_pinMode;                                                  // GPIO mode: IDF's input/output mode
 
-    uint16_t m_pollIntervalUS, m_longKeyPressMS, m_autoRepeatMS,            // Timing variables
-             m_doubleClickMS;
+    uint16_t m_pollIntervalUS,
+      m_longKeyPressMS,
+      m_autoRepeatMS,            // Timing variables
+      m_doubleClickMS;
      
     volatile bool m_longPress_preventKeyPress;                              // Boolean flag to prevent firing a keypress if a long press occurred (outside of polling fuction)
     volatile uint16_t m_validPolls = 0, m_totalPolls = 0;                   // Variables to conduct debouncing algoritm
@@ -107,34 +114,44 @@ class InterruptButton {
     void    setMenuLevel(uint8_t level);                       // Sets menu level across all buttons (ie buttons mean something different each page)
     uint8_t getMenuLevel();                                    // Retrieves menu level
 
-
-
     // Non-static instance specific member declarations ----------------------------------
-    InterruptButton(uint8_t pin, uint8_t pressedState, gpio_mode_t pinMode = GPIO_MODE_INPUT,     // Class Constructor
-                    uint16_t longKeyPressMS = 750, uint16_t autoRepeatMS = 250,
-                    uint16_t doubleClickMS = 200, uint32_t debounceUS = 8000);
+    // Class Constructor
+    InterruptButton(uint8_t pin, uint8_t pressedState,
+                    gpio_mode_t pinMode = GPIO_MODE_INPUT,
+                    uint16_t longKeyPressMS = IBTN_LONG_PRESS_TIME_MS,
+                    uint16_t autoRepeatMS = IBTN_AUTO_REPEAT_TIME_MS,
+                    uint16_t doubleClickMS = IBTN_DOUBLE_CLICK_TIME_MS,
+                    uint32_t debounceUS = IBTN_DEBOUNCE_TIME_US);
     ~InterruptButton();                                               // Class Destructor
+
+    /**
+     * @brief configure gpio and attach interrupt monitor
+     */
     void begin();                                                     // Instance initialiser
+
+    /**
+     * @brief stop interrupt and unconfigure gpio
+     * 
+     */
+    void stop();
+
     void enableEvent(event_t event);
     void disableEvent(event_t event);
     bool eventEnabled(event_t event);
 
     void      setLongPressInterval(uint16_t intervalMS);              // Updates LongPress Interval
-    uint16_t  getLongPressInterval(void);
+    inline uint16_t  getLongPressInterval(void) const { return m_longKeyPressMS; };
     void      setAutoRepeatInterval(uint16_t intervalMS);             // Updates autoRepeat Interval
-    uint16_t  getAutoRepeatInterval(void);
+    inline uint16_t  getAutoRepeatInterval(void) const { return m_autoRepeatMS; };
     void      setDoubleClickInterval(uint16_t intervalMS);            // Updates autoRepeat Interval
-    uint16_t  getDoubleClickInterval(void);
+    inline uint16_t  getDoubleClickInterval(void) const { return m_doubleClickMS; };
 
 
     // Routines to manage interface with external action functions associated with each event ---
     // Any functions bound to Asynchronous (ISR driven) events should be defined with IRAM_ATTR attribute and be as brief as possible
     // Any functions bound to Synchronous events (Actioned by loop call of "button.processSyncEvents()") may be longer and also may be defined as Lambda functions
 
-    void bind(  event_t event, uint8_t menuLevel, btn_callback_t action);   // Used to bind/unbind action to an event at specified menu level
-    inline void bind(  event_t event, btn_callback_t action){ bind(event, m_menuLevel, action); }    // Used to bind/unbind action to an event at current m_menuLevel
-    void unbind(event_t event, uint8_t menuLevel);
-    inline void unbind(event_t event){ unbind(event, m_menuLevel); };
+    void bind(  event_t event, btn_callback_t action, uint8_t menuLevel = 0);   // Used to bind/unbind action to an event at specified menu level
+    void unbind(event_t event, uint8_t menuLevel = 0);
 };
 
-#endif
