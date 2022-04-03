@@ -22,13 +22,14 @@ enum class event_t:uint8_t {
   AsyncEvents
 };
 
+// momentary button states
 enum class pinState_t:uint8_t {                     // Enumeration to assist with program flow at state machine for reading button
-  Released, 
-  ConfirmingPress,
-  Pressing,
-  Pressed, 
-  WaitingForRelease,
-  Releasing,
+  Released,                 // key is idle
+  PressDebounce,            // key press triggered, waiting for debounce confirmation
+  PressDown,                // key press debounced and confirmed
+  PressHold,                // key is held in a pressed state
+  ReleaseDebounce,
+  PressRelease,
   DblClickIdle,
   DblClickWaiting,
   DblClickTimeout
@@ -66,6 +67,19 @@ void stopBtnTask();
 // -- ----------------------------------------------------------------------------------------------------------------------
 class InterruptButton {
   private:
+
+    /**
+     * @brief GPIO ISR handler wrapper
+     * 
+     * @param arg - an object instance reference
+     */
+    static void isr_handler(void* arg);
+
+    /**
+     * @brief process the ISR for the object instance
+     * 
+     */
+    void gpio_update_from_isr();
 
     // Static class members shared by all instances of this object (common across all instances of the class)
     // ------------------------------------------------------------------------------------------------------
@@ -123,6 +137,7 @@ class InterruptButton {
                     uint16_t doubleClickMS = IBTN_DOUBLE_CLICK_TIME_MS,
                     uint32_t debounceUS = IBTN_DEBOUNCE_TIME_US);
     ~InterruptButton();                                               // Class Destructor
+
 
     /**
      * @brief configure gpio and attach interrupt monitor
