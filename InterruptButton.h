@@ -3,11 +3,15 @@
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include <functional>     // Necessary to use std::bind to bind arguments to ISR in attachInterrupt()
+#include <bitset>
 
 #define IBTN_LONG_PRESS_TIME_MS     750
 #define IBTN_AUTO_REPEAT_TIME_MS    250
 #define IBTN_DOUBLE_CLICK_TIME_MS   350
-#define IBTN_DEBOUNCE_TIME_US       8000
+#define IBTN_DEBOUNCE_TIME_US       5000      // polling interval for debouncer
+#define IBTN_DEBOUNCE_CNT           5         // number of consecutive readouts with the same value for the pin to be considered as debounced
+
+#define IBTN_MAX_MENU_DEPTH         8         // max menu level depth (flags bitvector length)
 
 typedef std::function<void ()> btn_callback_t;
 
@@ -17,7 +21,7 @@ enum class event_t:uint8_t {
   KeyPress,             // ... Their code is stored in the RAM so as to not rely on SPI bus for timing to get from flash memory
   LongKeyPress, 
   AutoRepeatPress, 
-  DoubleClick, 
+  MultiClick, 
   NumEventTypes,         // Not an event, but this value used to size the number of columns in event/action array.
   AsyncEvents
 };
@@ -27,19 +31,31 @@ enum class pinState_t:uint8_t {                     // Enumeration to assist wit
   Released,                 // key is idle
   PressDebounce,            // key press triggered, waiting for debounce confirmation
   PressDown,                // key press debounced and confirmed
-  PressHold,                // key is held in a pressed state
-  ReleaseDebounce,
-  PressRelease,
-  DblClickIdle,
-  DblClickWaiting,
-  DblClickTimeout
+  PressOnHold,              // key is held in a pressed state
+  ReleaseDebounce,          // received release interrput, but need to debounce and confirm
+  PressRelease,             // key has been released and debounced
+};
+
+enum class timer_event_t:uint8_t {
+  debounce = 0,
+  click,
+  longpress
 };
 
 
+/**
+ * @brief button trigger event structure
+ * gpio - gpio num triggered the event
+ * menulvl - button's menulevel at the time of event
+ * event - event type
+ * param - optional parameter (default is 0)
+ * NOTE: this struct is 32 bit ligned
+ */
 struct btntrigger_t {
   gpio_num_t gpio;
   uint8_t menulvl;
   event_t event;
+  int16_t param;
 
   bool operator== (const btntrigger_t& b) const { return (gpio == b.gpio && menulvl == b.menulvl && event == b.event); };
 };
@@ -76,42 +92,62 @@ class InterruptButton {
     static void isr_handler(void* arg);
 
     /**
+     * @brief timer's callback wrapper
+     * 
+     * @param cbt - an event type to distinguish the proper timer
+     */
+    void timers_handler(timer_event_t cbt);
+
+    /**
      * @brief process the ISR for the object instance
      * 
      */
     void gpio_update_from_isr();
 
+
+
+
     // Static class members shared by all instances of this object (common across all instances of the class)
     // ------------------------------------------------------------------------------------------------------
-    static void readButton(void* arg);                                      // Static function to read button state (must be static to bind to GPIO and timer ISR)
-    static void longPressEvent(void *arg);                                  // Wrapper / callback to excecute a longPress event
-    static void autoRepeatPressEvent(void *arg);                            // Wrapper / callback to excecute a autoRepeatPress event
-    static void doubleClickTimeout(void *arg);                              // Used to separate double-clicks from regular keyPress's
-    static void startTimer(esp_timer_handle_t &timer, uint32_t duration_US, void (*callBack)(void* arg), InterruptButton* btn, const char *msg);
-    static void killTimer(esp_timer_handle_t &timer);                       // Helper function to kill a timer
+    void readButton();                                      // Static function to read button state (must be static to bind to GPIO and timer ISR)
 
-    static const uint8_t m_targetPolls = 10;                                // Desired number of polls required to debounce a button
+    /**
+     * @brief LongPress and Autorepeat handler
+     * called via m_LongPressTimer and reuses the same timer to perform 'autorepeat on hold'
+     * 
+     */
+    void longPressEvent();                                  // Wrapper / callback to excecute a longPress event
+
+    //static void autoRepeatPressEvent(void *arg);                            // Wrapper / callback to excecute a autoRepeatPress event
+    void clickTimeout();                              // Used to separate double-clicks from regular keyPress's
+    //static void startTimer(esp_timer_handle_t &timer, uint32_t duration_US, void (*callBack)(void* arg), InterruptButton* btn, const char *msg);
+    void killTimer(esp_timer_handle_t &timer);                       // Helper function to kill a timer
+
 
     // Non-static instance specific member declarations
     // ------------------------------------------------
-    uint8_t m_menuLevel = 0;                                                // Current menulevel for all buttons (global in class so common across all buttons)
+    uint8_t m_menuLevel = 0;                                                // Current object's menulevel
+    std::bitset<IBTN_MAX_MENU_DEPTH> menu_dblclck{0x0};                     // bit vector for tracking clicks at specific menulevel
+    std::bitset<IBTN_MAX_MENU_DEPTH> menu_longpress{0x0};                   // bit vector for tracking longpress at specific menulevel
+    std::bitset<IBTN_MAX_MENU_DEPTH> menu_repeat{0x0};                      // bit vector for tracking repeats at specific menulevel
+
     volatile pinState_t m_state = pinState_t::Released;
-    volatile pinState_t m_stateDblClick = pinState_t::DblClickIdle;         // Instance specific state machine variable (intialised when intialising button)
-    esp_timer_handle_t m_buttonPollTimer = nullptr;                         // Instance specific timer for button debouncing
-    esp_timer_handle_t m_buttonLPandRepeatTimer = nullptr;                  // Instance specific timer for button longPress and autoRepeat timing
-    esp_timer_handle_t m_buttonDoubleClickTimer = nullptr;                  // Instance specific timer for policing double-clicks
+    esp_timer_handle_t m_DebounceTimer = nullptr;                           // Instance specific timer for button debouncing
+    esp_timer_handle_t m_LongPressTimer = nullptr;                          // Instance specific timer for button longPress and autoRepeat timing
+    esp_timer_handle_t m_ClickTimer = nullptr;                              // timer for counting consecutive clicks
 
     uint8_t m_pressedState;                                                 // State of button when it is pressed (LOW or HIGH)
     gpio_num_t m_pin;                                                       // Button gpio
     gpio_mode_t m_pinMode;                                                  // GPIO mode: IDF's input/output mode
 
-    uint16_t m_pollIntervalUS,
-      m_longKeyPressMS,
-      m_autoRepeatMS,            // Timing variables
-      m_doubleClickMS;
+    uint16_t m_gpio_debounceUS;
+    uint16_t m_longKeyPressMS;
+    uint16_t m_autoRepeatMS;
+    uint16_t m_doubleClickMS;
      
-    volatile bool m_longPress_preventKeyPress;                              // Boolean flag to prevent firing a keypress if a long press occurred (outside of polling fuction)
-    volatile uint16_t m_validPolls = 0, m_totalPolls = 0;                   // Variables to conduct debouncing algoritm
+    int8_t debounce_ctr{0};                                                  // debounce counter
+    int8_t click_ctr{0};                                                     // click counter
+    int16_t repeat_ctr{0};                                                   // repeat counter
 
     uint16_t eventMask = 0b10000111;        // Default to keyUp, keyDown, and keyPress enabled
                                             // When binding functions, longKeyPress, autoKeyPresses, and double clicks are automatically enabled.
