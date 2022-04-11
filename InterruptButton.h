@@ -27,7 +27,7 @@ enum class event_t:uint8_t {
 };
 
 // momentary button states
-enum class pinState_t:uint8_t {                     // Enumeration to assist with program flow at state machine for reading button
+enum class btnState_t:uint8_t {                     // Enumeration to assist with program flow at state machine for reading button
   Undefined=0,
   Released,                 // key is idle
   PressDebounce,            // key press triggered, waiting for debounce confirmation
@@ -53,7 +53,7 @@ enum class timer_event_t:uint8_t {
  * menulvl - button's menulevel at the time of event
  * event - event type
  * param - optional parameter (default is 0)
- * NOTE: this struct is 32 bit ligned
+ * NOTE: this struct is 32 bit aligned
  */
 struct btntrigger_t {
   gpio_num_t gpio;
@@ -72,9 +72,15 @@ struct btnaction_t {
 
 struct btnmenu_t {
   uint8_t level{0};
-  std::bitset<IBTN_MAX_MENU_DEPTH> click{0x8};                       // bit vector for tracking clicks at specific menulevel
-  std::bitset<IBTN_MAX_MENU_DEPTH> longpress{0x8};                   // bit vector for tracking longpress at specific menulevel
-  std::bitset<IBTN_MAX_MENU_DEPTH> repeat{0x8};                      // bit vector for tracking repeats at specific menulevel
+  std::bitset<IBTN_MAX_MENU_DEPTH> click{0x0};                       // bit vector for tracking clicks at specific menulevel
+  std::bitset<IBTN_MAX_MENU_DEPTH> longpress{0x0};                   // bit vector for tracking longpress at specific menulevel
+  std::bitset<IBTN_MAX_MENU_DEPTH> repeat{0x0};                      // bit vector for tracking repeats at specific menulevel
+
+  void eventSet(event_t evt, bool state, uint8_t menulvl);
+  bool eventGet(event_t evt, uint8_t menulvl);
+  inline void eventSet(event_t evt, bool state){ eventSet(evt, state, level); }
+  inline bool eventGet(event_t evt){ return eventGet(evt, level); }
+
 };
 
 /**
@@ -123,14 +129,14 @@ class InterruptButton {
      * called via m_LongPressTimer and reuses the same timer to perform 'autorepeat on hold'
      * 
      */
-    void longPressEvent();                                  // timer callback to excecute a longPress event
+    void longPressTimeout();                                  // timer callback to excecute a longPress event
 
     void clickTimeout();                                    // Used to separate double-clicks from regular keyPress's
     void killTimer(esp_timer_handle_t &timer);              // Helper function to kill a timer
 
     btnmenu_t m_menu;                                                       // feature set
 
-    volatile pinState_t m_state = pinState_t::Undefined;
+    volatile btnState_t m_state = btnState_t::Undefined;
 
     esp_timer_handle_t m_DebounceTimer = nullptr;                           // Instance specific timer for button debouncing
     esp_timer_handle_t m_LongPressTimer = nullptr;                          // Instance specific timer for button longPress and autoRepeat timing
@@ -157,11 +163,6 @@ class InterruptButton {
 
 
   public:
-    // Static class members shared by all instances of this object -----------------------
-    void    setMenuLevel(uint8_t level);                       // Sets menu level across all buttons (ie buttons mean something different each page)
-    uint8_t getMenuLevel();                                    // Retrieves menu level
-
-    // Non-static instance specific member declarations ----------------------------------
     // Class Constructor
     InterruptButton(uint8_t pin, uint8_t pressedState,
                     gpio_mode_t pinMode = GPIO_MODE_INPUT,
@@ -183,11 +184,26 @@ class InterruptButton {
      */
     void disable();
 
-    void enableEvent(event_t event, bool enable, uint8_t menulvl);
-    inline void enableEvent(event_t event, bool enable){ enableEvent(event, m_menu.level); };
+    inline void    setMenuLevel(uint8_t level){ m_menu.level = level; };  // Sets menu level across all buttons (ie buttons mean something different each page)
+    inline uint8_t getMenuLevel(){ return m_menu.level; }                 // Retrieves menu level
 
-    bool eventEnabled(event_t event, uint8_t menulvl);
-    bool eventEnabled(event_t event){ return eventEnabled(event, m_menu.level); };
+    /**
+     * @brief Enable/Disable particalar event type at specific menulevel
+     * 
+     * @param event - event type
+     * @param menulvl - menu level
+     * @param enable - enable/disable state
+     */
+    inline void setEventState(event_t event, uint8_t menulvl, bool enable){ m_menu.eventSet( event, menulvl, enable); };
+
+    /**
+     * @brief Get event type state at specific menulevel
+     * 
+     * @param event - event type
+     * @param menulvl - menu level
+     */
+    inline bool getEventState(event_t event, uint8_t menulvl){ return m_menu.eventGet( event, menulvl); };
+
 
     void      setLongPressInterval(uint16_t intervalMS);              // Updates LongPress Interval
     inline uint16_t  getLongPressInterval(void) const { return m_longKeyPressMS; };
@@ -196,10 +212,6 @@ class InterruptButton {
     void      setDoubleClickInterval(uint16_t intervalMS);            // Updates autoRepeat Interval
     inline uint16_t  getDoubleClickInterval(void) const { return m_doubleClickMS; };
 
-
-    // Routines to manage interface with external action functions associated with each event ---
-    // Any functions bound to Asynchronous (ISR driven) events should be defined with IRAM_ATTR attribute and be as brief as possible
-    // Any functions bound to Synchronous events (Actioned by loop call of "button.processSyncEvents()") may be longer and also may be defined as Lambda functions
 
     void bind(  event_t event, btn_callback_t action, uint8_t menuLevel = 0);   // Used to bind/unbind action to an event at specified menu level
     void unbind(event_t event, uint8_t menuLevel = 0);
