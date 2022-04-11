@@ -77,9 +77,9 @@ struct btnmenu_t {
   std::bitset<IBTN_MAX_MENU_DEPTH> repeat{0x0};                      // bit vector for tracking repeats at specific menulevel
 
   void eventSet(event_t evt, bool state, uint8_t menulvl);
-  bool eventGet(event_t evt, uint8_t menulvl);
+  bool eventGet(event_t evt, uint8_t menulvl) const;
   inline void eventSet(event_t evt, bool state){ eventSet(evt, state, level); }
-  inline bool eventGet(event_t evt){ return eventGet(evt, level); }
+  inline bool eventGet(event_t evt) const { return eventGet(evt, level); }
 
 };
 
@@ -115,13 +115,6 @@ class InterruptButton {
      */
     void gpio_update_from_isr();
 
-    /**
-     * @brief timer's callback wrapper
-     * 
-     * @param cbt - an event type to distinguish the proper timer
-     */
-    void timers_handler(timer_event_t cbt);
-
     void readButton();                                      // Static function to read button state (must be static to bind to GPIO and timer ISR)
 
     /**
@@ -129,9 +122,18 @@ class InterruptButton {
      * called via m_LongPressTimer and reuses the same timer to perform 'autorepeat on hold'
      * 
      */
-    void longPressTimeout();                                  // timer callback to excecute a longPress event
+    void longPressTimeout();                                // timer callback to excecute a longPress event
 
     void clickTimeout();                                    // Used to separate double-clicks from regular keyPress's
+
+    /**
+     * @brief helper method to create esp soft timer
+     * 
+     * @param timer
+     * @param tevent
+     */
+    void createTimer(timer_event_t tevent, esp_timer_handle_t &timer);
+
     void killTimer(esp_timer_handle_t &timer);              // Helper function to kill a timer
 
     btnmenu_t m_menu;                                                       // feature set
@@ -184,8 +186,15 @@ class InterruptButton {
      */
     void disable();
 
-    inline void    setMenuLevel(uint8_t level){ m_menu.level = level; };  // Sets menu level across all buttons (ie buttons mean something different each page)
-    inline uint8_t getMenuLevel(){ return m_menu.level; }                 // Retrieves menu level
+    /**
+     * @brief switch current menulevel for the button
+     * changing menulevel affects handling of LongPress/MultiClick events, etc...
+     * 
+     * @param level
+     */
+    void setMenuLevel(uint8_t level);
+
+    inline uint8_t getMenuLevel() const { return m_menu.level; }                 // Retrieves menu level
 
     /**
      * @brief Enable/Disable particalar event type at specific menulevel
@@ -202,7 +211,7 @@ class InterruptButton {
      * @param event - event type
      * @param menulvl - menu level
      */
-    inline bool getEventState(event_t event, uint8_t menulvl){ return m_menu.eventGet( event, menulvl); };
+    inline bool getEventState(event_t event, uint8_t menulvl) const { return m_menu.eventGet( event, menulvl); };
 
 
     void      setLongPressInterval(uint16_t intervalMS);              // Updates LongPress Interval
@@ -215,5 +224,13 @@ class InterruptButton {
 
     void bind(  event_t event, btn_callback_t action, uint8_t menuLevel = 0);   // Used to bind/unbind action to an event at specified menu level
     void unbind(event_t event, uint8_t menuLevel = 0);
+
+    /**
+     * @brief return current Button logical state
+     * 
+     * @return btnState_t 
+     */
+    btnState_t getState() const { return m_state; };
+
 };
 

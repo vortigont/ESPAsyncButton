@@ -78,8 +78,6 @@ void stopBtnTask(){
   }
 }
 
-
-
 void btnmenu_t::eventSet(event_t evt, bool state, uint8_t menulvl){
   if (menulvl >= IBTN_MAX_MENU_DEPTH)
     return;
@@ -102,7 +100,7 @@ void btnmenu_t::eventSet(event_t evt, bool state, uint8_t menulvl){
 
 }
 
-bool btnmenu_t::eventGet(event_t evt, uint8_t menulvl){
+bool btnmenu_t::eventGet(event_t evt, uint8_t menulvl) const {
   if (menulvl >= IBTN_MAX_MENU_DEPTH)
     return false;
 
@@ -129,22 +127,6 @@ void IRAM_ATTR InterruptButton::isr_handler(void* arg){
   InterruptButton* btn = static_cast<InterruptButton*>(arg);
   btn->gpio_update_from_isr();
 }
-
-void InterruptButton::timers_handler(timer_event_t cbt){
-  switch(cbt){
-    case  timer_event_t::debounce:
-      readButton();
-      return;
-    case  timer_event_t::longpress:
-      longPressTimeout();
-      return;
-    case  timer_event_t::click:
-      clickTimeout();
-    default:
-      return;
-  }
-}
-
 
 void IRAM_ATTR InterruptButton::gpio_update_from_isr(){
 
@@ -312,19 +294,39 @@ void InterruptButton::clickTimeout(){
 }
 
 //-- Helper method to simplify starting a timer ----------------------------------------------------------
-//void IRAM_ATTR InterruptButton::startTimer(esp_timer_handle_t &timer, uint32_t duration_US, void (*callBack)(void* arg), InterruptButton* btn, const char *msg){
-/*
-void InterruptButton::startTimer(esp_timer_handle_t &timer, uint64_t duration_US, timer_event_t cbtype, const char *name){
+void InterruptButton::createTimer(timer_event_t tevent, esp_timer_handle_t &timer){
+  if (timer != nullptr)
+    return;         // timer already exist
+
   esp_timer_create_args_t tmrConfig;
+
   tmrConfig.arg = static_cast<void*>(this);
-  tmrConfig.callback = std::bind(&InterruptButton::timer_handler, this, cbtype);
   tmrConfig.dispatch_method = ESP_TIMER_TASK;
-  tmrConfig.name = name;
-  killTimer(timer);
+  tmrConfig.skip_unhandled_events = true;
+
+  switch (tevent)  {
+    case timer_event_t::debounce :
+      tmrConfig.callback = [](void* self) { static_cast<InterruptButton*>(self)->readButton(); };
+      tmrConfig.name = "btn_dbnc";
+      break;
+
+    case timer_event_t::click :
+      tmrConfig.callback = [](void* self) { static_cast<InterruptButton*>(self)->clickTimeout(); };
+      tmrConfig.name = "btn_clck";
+      break;
+
+    case timer_event_t::longpress :
+      tmrConfig.callback = [](void* self) { static_cast<InterruptButton*>(self)->longPressTimeout(); };
+      tmrConfig.name = "btn_lp";
+      break;
+
+    default:
+      return;
+  }
+
   esp_timer_create(&tmrConfig, &timer);
-  esp_timer_start_once(timer, duration_US);
+
 }
-*/
 
 //-- Helper method to kill a timer -----------------------------------------------------------------------
 void InterruptButton::killTimer(esp_timer_handle_t &timer){
@@ -379,32 +381,7 @@ void InterruptButton::enable(){
 
     startBtnTask();                                     // ensure we have a Q to work on and event consumer Task
 
-    // create debounce timer
-    esp_timer_create_args_t tmrConfig;
-    tmrConfig.callback = [](void* self) { static_cast<InterruptButton*>(self)->timers_handler(timer_event_t::debounce); };
-    tmrConfig.arg = static_cast<void*>(this);
-    tmrConfig.dispatch_method = ESP_TIMER_TASK;
-    tmrConfig.name = "ibtn_t1";
-    tmrConfig.skip_unhandled_events = true;
-    esp_timer_create(&tmrConfig, &m_DebounceTimer);
-
-    // create click timer
-    //esp_timer_create_args_t tmrConfig;
-    tmrConfig.callback = [](void* self) { static_cast<InterruptButton*>(self)->timers_handler(timer_event_t::click); };
-    tmrConfig.arg = static_cast<void*>(this);
-    tmrConfig.dispatch_method = ESP_TIMER_TASK;
-    tmrConfig.name = "ibtn_t2";
-    tmrConfig.skip_unhandled_events = true;
-    esp_timer_create(&tmrConfig, &m_ClickTimer);
-
-    // create click timer
-    //esp_timer_create_args_t tmrConfig;
-    tmrConfig.callback = [](void* self) { static_cast<InterruptButton*>(self)->timers_handler(timer_event_t::longpress); };
-    tmrConfig.arg = static_cast<void*>(this);
-    tmrConfig.dispatch_method = ESP_TIMER_TASK;
-    tmrConfig.name = "ibtn_t3";
-    tmrConfig.skip_unhandled_events = true;
-    esp_timer_create(&tmrConfig, &m_LongPressTimer);
+    createTimer(timer_event_t::debounce, m_DebounceTimer);               // preallocate debounce timer
 
     gpio_config_t gpio_conf = {};
     gpio_conf.mode = m_pinMode;
@@ -487,4 +464,22 @@ void InterruptButton::disable(){
   killTimer(m_LongPressTimer);
   killTimer(m_ClickTimer);
   m_state = btnState_t::Undefined;
+}
+
+void InterruptButton::setMenuLevel(uint8_t level){
+  if (level > IBTN_MAX_MENU_DEPTH)
+    return;
+
+  m_menu.level = level;
+
+  if (m_menu.eventGet(event_t::AutoRepeatKeyPress) || m_menu.eventGet(event_t::LongKeyPress))
+    createTimer(timer_event_t::longpress, m_LongPressTimer);
+  else
+    killTimer(m_LongPressTimer);
+
+  if (m_menu.eventGet(event_t::MultiClick))
+    createTimer(timer_event_t::click, m_ClickTimer);
+  else
+    killTimer(m_ClickTimer);
+
 }
