@@ -84,18 +84,18 @@ void btnmenu_t::eventSet(event_t evt, bool state, uint8_t menulvl){
 
   switch(evt){
     case event_t::LongKeyPress :
-      state ? longpress.set(menulvl) : longpress.reset(menulvl);
+      longpress.set(menulvl, state);
       break;
     case event_t::AutoRepeatKeyPress :
-      state ? repeat.set(menulvl) : repeat.reset(menulvl);
+      repeat.set(menulvl, state);
       break;
     case event_t::MultiClick :
-      state ? click.set(menulvl) : repeat.reset(menulvl);
+      click.set(menulvl, state);
       break;
     case event_t::AnyEvent :
-      state ? longpress.set(menulvl) : longpress.reset(menulvl);
-      state ? repeat.set(menulvl) : repeat.reset(menulvl);
-      state ? click.set(menulvl) : repeat.reset(menulvl);
+      longpress.set(menulvl, state);
+      repeat.set(menulvl, state);
+      click.set(menulvl, state);
   }
 
 }
@@ -124,8 +124,7 @@ void IRAM_ATTR InterruptButton::isr_handler(void* arg){
   if (!q_action)    // quit if no Q
     return;
 
-  InterruptButton* btn = static_cast<InterruptButton*>(arg);
-  btn->gpio_update_from_isr();
+  static_cast<InterruptButton*>(arg)->gpio_update_from_isr();
 }
 
 void IRAM_ATTR InterruptButton::gpio_update_from_isr(){
