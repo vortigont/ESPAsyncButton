@@ -428,6 +428,12 @@ void InterruptButton::bind(event_t event, btn_callback_t action, uint8_t menuLev
   btnaction_t a = { {m_pin, menuLevel, event}, action};
   btn_actions.add(a);
   m_menu.eventSet(event, true, menuLevel);
+
+  if (m_menu.eventGet(event_t::AutoRepeatKeyPress) || m_menu.eventGet(event_t::LongKeyPress))
+    createTimer(timer_event_t::longpress, m_LongPressTimer);
+
+  if (m_menu.eventGet(event_t::MultiClick))
+    createTimer(timer_event_t::click, m_ClickTimer);
 }
 
 void InterruptButton::unbind(event_t event, uint8_t menuLevel){
