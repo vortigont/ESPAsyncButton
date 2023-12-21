@@ -17,27 +17,28 @@
 typedef std::function<void ()> btn_callback_t;
 
 enum class event_t:uint8_t {
-  KeyDown = 0,          // These first 6 events are asycnchronous unless explicitly stated and actioned immediately in an ISR ...
-  KeyUp,                // ... Asynchronous events should be defined with the IRAM_ATTR attributed so that ...
-  KeyPress,             // ... Their code is stored in the RAM so as to not rely on SPI bus for timing to get from flash memory
-  LongKeyPress,
-  AutoRepeatKeyPress,
-  MultiClick,
-  AnyEvent              // Not an event, but this value used to size the number of columns in event/action array.
+  none = 0,
+  press,
+  release,
+  click,
+  longClick,
+  autoRepeat,
+  multiClick,
+  anyClick                 // any of 'click', 'repeat', 'longClick'
 };
 
 // momentary button states
 enum class btnState_t:uint8_t {                     // Enumeration to assist with program flow at state machine for reading button
-  Undefined=0,
-  Released,                 // key is idle
-  PressDebounce,            // key press triggered, waiting for debounce confirmation
-  PressDown,                // key press debounced and confirmed
-  PressOnHold,              // key is held in a pressed state for time < LongPress
-  PressOnLongHold,          // key is held in a pressed state for time > LongPress
-  ReleaseDebounce,          // received release interrput, but need to debounce and confirm
-  ReleaseLongDebounce,      // received release interrput after a LongHold, but need to debounce and confirm
-  PressRelease,             // key has been released and debounced
-  PressLongRelease
+  undefined=0,
+  released,                 // key is idle
+  pressDebounce,            // key press triggered, waiting for debounce confirmation
+  pressed,                // key press debounced and confirmed
+  onHold,              // key is held in a pressed state for time < LongPress
+  onLongHold,          // key is held in a pressed state for time > LongPress
+  releaseDebounce,          // received release interrput, but need to debounce and confirm
+  releaseLongDebounce,      // received release interrput after a LongHold, but need to debounce and confirm
+  pressRelease,             // key has been released and debounced
+  pressLongRelease
 };
 
 enum class timer_event_t:uint8_t {
@@ -100,7 +101,14 @@ void stopBtnTask();
 // -- Interrupt Button and Debouncer ---------------------------------------------------------------------------------------
 // -- ----------------------------------------------------------------------------------------------------------------------
 class InterruptButton {
-  private:
+
+    struct Counters
+    {
+      int8_t debounce{0};     // debounce counter
+      int8_t click{0};        // click counter
+      int8_t repeat{0};       // repeat counter
+    };
+  
 
     /**
      * @brief GPIO ISR handler wrapper
@@ -115,7 +123,7 @@ class InterruptButton {
      */
     void gpio_update_from_isr();
 
-    void readButton();                                      // Static function to read button state (must be static to bind to GPIO and timer ISR)
+    void readButton();
 
     /**
      * @brief LongPress and Autorepeat handler
@@ -134,11 +142,12 @@ class InterruptButton {
      */
     void createTimer(timer_event_t tevent, esp_timer_handle_t &timer);
 
-    void killTimer(esp_timer_handle_t &timer);              // Helper function to kill a timer
+    // Helper function to kill a timer
+    void killTimer(esp_timer_handle_t &timer);
 
     btnmenu_t m_menu;                                                       // feature set
 
-    volatile btnState_t m_state = btnState_t::Undefined;
+    volatile btnState_t m_state = btnState_t::undefined;
 
     esp_timer_handle_t m_DebounceTimer = nullptr;                           // Instance specific timer for button debouncing
     esp_timer_handle_t m_LongPressTimer = nullptr;                          // Instance specific timer for button longPress and autoRepeat timing
@@ -151,11 +160,9 @@ class InterruptButton {
     uint16_t m_gpio_debounceUS;
     uint16_t m_longKeyPressMS;
     uint16_t m_autoRepeatMS;
-    uint16_t m_doubleClickMS;
-     
-    int8_t debounce_ctr =0;                                                  // debounce counter
-    int8_t click_ctr =0;                                                     // click counter
-    int16_t repeat_ctr =0;                                                   // repeat counter
+    uint16_t m_MultiClickMS;
+
+    Counters _ctr;
 
     /**
      * @brief remove all action bindings
@@ -164,13 +171,13 @@ class InterruptButton {
     void unbindall();
 
 
-  public:
+    public:
     // Class Constructor
     InterruptButton(uint8_t pin, uint8_t pressedState,
                     gpio_mode_t pinMode = GPIO_MODE_INPUT,
                     uint16_t longKeyPressMS = IBTN_LONG_PRESS_TIME_MS,
                     uint16_t autoRepeatMS = IBTN_AUTO_REPEAT_TIME_MS,
-                    uint16_t doubleClickMS = IBTN_DOUBLE_CLICK_TIME_MS,
+                    uint16_t MultiClickMS = IBTN_DOUBLE_CLICK_TIME_MS,
                     uint32_t debounceUS = IBTN_DEBOUNCE_TIME_US);
     ~InterruptButton();                                               // Class Destructor
 
@@ -188,7 +195,7 @@ class InterruptButton {
 
     /**
      * @brief switch current menulevel for the button
-     * changing menulevel affects handling of LongPress/MultiClick events, etc...
+     * changing menulevel affects handling of LongPress/multiClick events, etc...
      * 
      * @param level
      */
@@ -218,8 +225,8 @@ class InterruptButton {
     inline uint16_t  getLongPressInterval(void) const { return m_longKeyPressMS; };
     void      setAutoRepeatInterval(uint16_t intervalMS);             // Updates autoRepeat Interval
     inline uint16_t  getAutoRepeatInterval(void) const { return m_autoRepeatMS; };
-    void      setDoubleClickInterval(uint16_t intervalMS);            // Updates autoRepeat Interval
-    inline uint16_t  getDoubleClickInterval(void) const { return m_doubleClickMS; };
+    void      setMultiClickInterval(uint16_t intervalMS);            // Updates autoRepeat Interval
+    inline uint16_t  getMultiClickInterval(void) const { return m_MultiClickMS; };
 
 
     void bind(  event_t event, btn_callback_t action, uint8_t menuLevel = 0);   // Used to bind/unbind action to an event at specified menu level

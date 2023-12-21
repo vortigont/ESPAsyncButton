@@ -10,7 +10,7 @@
 #endif
 
 #ifndef IBUTTON_Q_DEPTH
-#define IBUTTON_Q_DEPTH               5
+#define IBUTTON_Q_DEPTH               4
 #endif
 
 #ifndef IBUTTON_EVT_TASK_PRIO
@@ -83,19 +83,21 @@ void btnmenu_t::eventSet(event_t evt, bool state, uint8_t menulvl){
     return;
 
   switch(evt){
-    case event_t::LongKeyPress :
+    case event_t::longClick :
       longpress.set(menulvl, state);
       break;
-    case event_t::AutoRepeatKeyPress :
+    case event_t::autoRepeat :
       repeat.set(menulvl, state);
       break;
-    case event_t::MultiClick :
+    case event_t::multiClick :
       click.set(menulvl, state);
       break;
-    case event_t::AnyEvent :
+    case event_t::anyClick :
       longpress.set(menulvl, state);
       repeat.set(menulvl, state);
       click.set(menulvl, state);
+      break;
+    default:;
   }
 
 }
@@ -105,12 +107,13 @@ bool btnmenu_t::eventGet(event_t evt, uint8_t menulvl) const {
     return false;
 
   switch(evt){
-    case event_t::LongKeyPress :
+    case event_t::longClick :
       return longpress.test(menulvl);
-    case event_t::AutoRepeatKeyPress :
+    case event_t::autoRepeat :
       return repeat.test(menulvl);
-    case event_t::MultiClick :
+    case event_t::multiClick :
       return click.test(menulvl);
+    default:;
   }
   return true;      // all other events are enabled by default
 
@@ -130,21 +133,21 @@ void IRAM_ATTR InterruptButton::isr_handler(void* arg){
 void IRAM_ATTR InterruptButton::gpio_update_from_isr(){
 
   switch(m_state){
-    case btnState_t::Released:                                  // Was sitting released but just detected a signal from the button
-      m_state = btnState_t::PressDebounce;
+    case btnState_t::released:                                  // Was sitting released but just detected a signal from the button
+      m_state = btnState_t::pressDebounce;
       break;
-    case btnState_t::PressOnHold:
-      m_state = btnState_t::ReleaseDebounce;
+    case btnState_t::onHold:
+      m_state = btnState_t::releaseDebounce;
       break;
-    case btnState_t::PressOnLongHold:
-      m_state = btnState_t::ReleaseLongDebounce;
+    case btnState_t::onLongHold:
+      m_state = btnState_t::releaseLongDebounce;
       break;
     default:
       return;                                                   // ignore unknown cases
   }
 
   gpio_intr_disable(m_pin);                                     // disable gpio ISR while we poll for a valid press (debouncer)
-  debounce_ctr = 0;                                             // reset debounce counter
+  _ctr.debounce = 0;                                             // reset debounce counter
   if (m_DebounceTimer)
     esp_timer_start_periodic(m_DebounceTimer, m_gpio_debounceUS / IBTN_DEBOUNCE_CNT);
 }
@@ -155,58 +158,58 @@ void InterruptButton::readButton(){
     return;
 
   //BaseType_t xCntxSwitch = pdFALSE;
-  btntrigger_t t = { m_pin, m_menu.level, event_t::KeyDown, 0};
+  btntrigger_t t = { m_pin, m_menu.level, event_t::press, 0};
 
   switch(m_state){
-    case btnState_t::PressDebounce: {                                         // we get here each time the debounce timer expires (onchange interrupt disabled remember)
+    case btnState_t::pressDebounce: {                                         // we get here each time the debounce timer expires (onchange interrupt disabled remember)
       if(gpio_get_level(m_pin) == m_pressedState)
-        ++debounce_ctr;
+        ++_ctr.debounce;
       else
-        --debounce_ctr;
+        --_ctr.debounce;
 
       // if debounce counter reached negative threshold => false press or noise
-      if (debounce_ctr == -1*IBTN_DEBOUNCE_CNT){
-        m_state = btnState_t::Released;
+      if (_ctr.debounce == -1*IBTN_DEBOUNCE_CNT){
+        m_state = btnState_t::released;
         esp_timer_stop(m_DebounceTimer);                                      // stop debounce timer
         gpio_intr_enable(m_pin);                                              // enable gpio interrupt
         return;
       }
 
-      if (debounce_ctr < IBTN_DEBOUNCE_CNT)
+      if (_ctr.debounce < IBTN_DEBOUNCE_CNT)
         return;                                                               // keep debouncing
 
-      // if debounce counter reached positive threshold => confirmed keypress
-      m_state = btnState_t::PressDown;                                        // change button state to confirmed keypress
-      // spill sthrough here to pinState_t::PressDown
+      // if debounce counter reached positive threshold => confirmed click
+      m_state = btnState_t::pressed;                                        // change button state to confirmed click
+      // spill sthrough here to pinState_t::pressed
     }
 
-    case btnState_t::PressDown: {                                             // VALID KEYDOWN, assumed pressed if it had valid polls more than half the time
+    case btnState_t::pressed: {                                             // VALID press, assumed pressed if it had valid polls more than half the time
       esp_timer_stop(m_DebounceTimer);                                        // cancel debounce polling
 
-      t.event = event_t::KeyDown;
-      xQueueSendToBack(q_action, &t, (TickType_t) 0);                         // queue KeyDown event
+      t.event = event_t::press;
+      xQueueSendToBack(q_action, &t, (TickType_t) 0);                         // queue press event
 
-      if (m_menu.eventGet(event_t::LongKeyPress) || m_menu.eventGet(event_t::AutoRepeatKeyPress))  // set long_press timeout if longpress/repeat is active on current menulevel
+      if (m_menu.eventGet(event_t::longClick) || m_menu.eventGet(event_t::autoRepeat))  // set long_press timeout if longpress/repeat is active on current menulevel
         esp_timer_start_once(m_LongPressTimer, m_longKeyPressMS * 1000);
 
-      m_state = btnState_t::PressOnHold;
+      m_state = btnState_t::onHold;
       gpio_intr_enable(m_pin);                                                 // Begin monitoring pin again
       break;
     }
 
-    case btnState_t::ReleaseDebounce :
-    case btnState_t::ReleaseLongDebounce : {
+    case btnState_t::releaseDebounce :
+    case btnState_t::releaseLongDebounce : {
       if(gpio_get_level(m_pin) == m_pressedState)
-        --debounce_ctr;
+        --_ctr.debounce;
       else
-        ++debounce_ctr;
+        ++_ctr.debounce;
 
       // if debounce counter reached negative threshold => false release or noise
-      if (debounce_ctr == -1*IBTN_DEBOUNCE_CNT){
-        if (m_state == btnState_t::ReleaseLongDebounce)
-          m_state = btnState_t::PressOnLongHold;
+      if (_ctr.debounce == -1*IBTN_DEBOUNCE_CNT){
+        if (m_state == btnState_t::releaseLongDebounce)
+          m_state = btnState_t::onLongHold;
         else
-          m_state = btnState_t::PressOnHold;
+          m_state = btnState_t::onHold;
 
         esp_timer_stop(m_DebounceTimer);                                      // stop debounce timer
         gpio_intr_enable(m_pin);                                              // enable gpio interrupt
@@ -214,42 +217,43 @@ void InterruptButton::readButton(){
       }
 
       // if debounce counter reached positive threshold => confirmed KeyRelease
-      if (debounce_ctr < IBTN_DEBOUNCE_CNT)                                   // keep debouncing or monitor for gpio interrupt
+      if (_ctr.debounce < IBTN_DEBOUNCE_CNT)                                   // keep debouncing or monitor for gpio interrupt
         return;
 
-      if (m_state == btnState_t::ReleaseLongDebounce)
-        m_state = btnState_t::PressLongRelease;
+      if (m_state == btnState_t::releaseLongDebounce)
+        m_state = btnState_t::pressLongRelease;
       else
-        m_state = btnState_t::PressRelease;                                 // change button state to confirmed keyrelease
-      // spill through here to pinState_t::PressRelease
+        m_state = btnState_t::pressRelease;                                 // change button state to confirmed keyrelease
+      // spill through here to pinState_t::pressRelease
     }
 
-    case btnState_t::PressRelease:
-    case btnState_t::PressLongRelease: {
+    case btnState_t::pressRelease:
+    case btnState_t::pressLongRelease: {
       esp_timer_stop(m_DebounceTimer);
       if(m_LongPressTimer){                                                   // cancel longpress and autorepeat action on release
         esp_timer_stop(m_LongPressTimer);
-        repeat_ctr = 0;
+        _ctr.repeat = 0;
       }
 
-      t.event = event_t::KeyUp;
-      xQueueSendToBack(q_action, &t, (TickType_t) 0);                         // queue KeyUp event
+      t.event = event_t::release;
+      xQueueSendToBack(q_action, &t, (TickType_t) 0);                         // queue release event
 
       // check if multiclicks are enabled and we are not in LongPress state
-      if (m_state == btnState_t::PressRelease && m_menu.eventGet(event_t::MultiClick)){
+      if (m_state == btnState_t::pressRelease && m_menu.eventGet(event_t::multiClick)){
         esp_timer_stop(m_ClickTimer);                                         // (re)start click timer
-        esp_timer_start_once(m_ClickTimer, m_doubleClickMS * 1000);
-        ++click_ctr;                                                          // increment click counter
-      } else if (m_state == btnState_t::PressRelease) {                       // otherwise queue KeyPress event
-        t.event = event_t::KeyPress;
+        esp_timer_start_once(m_ClickTimer, m_MultiClickMS * 1000);
+        ++_ctr.click;                                                          // increment click counter
+      } else if (m_state == btnState_t::pressRelease) {                       // otherwise queue click event
+        t.event = event_t::click;
         xQueueSendToBack(q_action, &t, (TickType_t) 0);
       }
-      // else is a 'PressLongRelease' state, skip all events
+      // else is a 'pressLongRelease' state, skip all events
 
-      m_state = btnState_t::Released;                                         // change button state to 'release' and wait for next press/click
+      m_state = btnState_t::released;                                         // change button state to 'release' and wait for next press/click
       gpio_intr_enable(m_pin);
       return;
     }
+    default:;
   } // End of SWITCH statement
 
 //  if( xCntxSwitch )               // perform a context switch if required
@@ -262,33 +266,33 @@ void InterruptButton::longPressTimeout(){
   if (!q_action || gpio_get_level(m_pin) != m_pressedState)                         // recheck if button is still in "pressed" state
     return;
 
-  m_state = btnState_t::PressOnLongHold;
-  btntrigger_t t = { m_pin, m_menu.level, event_t::LongKeyPress, 0};
+  m_state = btnState_t::onLongHold;
+  btntrigger_t t = { m_pin, m_menu.level, event_t::longClick, 0};
 
   // check if repeat on Hold is activated
-  if(m_menu.eventGet(event_t::AutoRepeatKeyPress)){
-      t.event = repeat_ctr ? event_t::AutoRepeatKeyPress : event_t::LongKeyPress;   // first event is 'LongPress', all consecutive is 'Autorepeat'
-      t.param = repeat_ctr++;                                                       // postincrement the counter
+  if(m_menu.eventGet(event_t::autoRepeat)){
+      t.event = _ctr.repeat ? event_t::autoRepeat : event_t::longClick;   // first event is 'LongPress', all consecutive is 'Autorepeat'
+      t.param = _ctr.repeat++;                                                       // postincrement the counter
       esp_timer_start_once(m_LongPressTimer, m_autoRepeatMS * 1000);
   }
 
   xQueueSendToBack(q_action, (void*)&t, (TickType_t)0);
 }
 
-//-- Method to return to interpret previous keyUp as a keyPress instead of a doubleClick if it times out.
+//-- Method to return to interpret previous release as a click instead of a doubleClick if it times out.
 void InterruptButton::clickTimeout(){
   if (!q_action)
     return;
 
-  btntrigger_t t = { m_pin, m_menu.level, event_t::KeyPress};
+  btntrigger_t t = { m_pin, m_menu.level, event_t::click};
 
-  // check click counter, if there was only one click, than report it as 'KeyPress', otherwise report as 'MiltipleClick'
-  if (click_ctr > 1){
-    t.event = event_t::MultiClick;
-    t.param = click_ctr;
+  // check click counter, if there was only one click, than report it as 'click', otherwise report as 'MiltipleClick'
+  if (_ctr.click > 1){
+    t.event = event_t::multiClick;
+    t.param = _ctr.click;
   }
 
-  click_ctr = 0;
+  _ctr.click = 0;
   xQueueSendToBack(q_action, (void*)&t, (TickType_t)0);
 }
 
@@ -353,7 +357,7 @@ InterruptButton::InterruptButton(uint8_t pin, uint8_t pressedState, gpio_mode_t 
                                  m_pinMode(pinMode),
                                  m_longKeyPressMS(longKeyPressMS),
                                  m_autoRepeatMS(autoRepeatMS),
-                                 m_doubleClickMS(doubleClickMS),
+                                 m_MultiClickMS(doubleClickMS),
                                  m_gpio_debounceUS(debounceUS) {
 
   // gpio number sanity check
@@ -390,12 +394,12 @@ void InterruptButton::enable(){
     gpio_conf.intr_type = GPIO_INTR_ANYEDGE;
     gpio_config(&gpio_conf);                                                    // configure GPIO with the given settings
 
-    m_state = (gpio_get_level(m_pin) == m_pressedState) ? btnState_t::PressOnHold : btnState_t::Released;    // Set to current state when initialising
+    m_state = (gpio_get_level(m_pin) == m_pressedState) ? btnState_t::onHold : btnState_t::released;    // Set to current state when initialising
 
     esp_err_t err = gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);            // it' OK to call this function multiple times
     ESP_LOGD(TAG, "GPIO ISR service installed with exit status: %d", err);
 
-    debounce_ctr = click_ctr = repeat_ctr = 0;                                  // clear counters
+    _ctr.debounce = _ctr.click = _ctr.repeat = 0;                                  // clear counters
 
     gpio_isr_handler_add(m_pin, InterruptButton::isr_handler, static_cast<void*>(this));
 }
@@ -404,7 +408,7 @@ void InterruptButton::enable(){
 //-- TIMING INTERVAL GETTERS AND SETTERS -----------------------------------------------------------------
 void      InterruptButton::setLongPressInterval(uint16_t intervalMS)    { m_longKeyPressMS = intervalMS; }
 void      InterruptButton::setAutoRepeatInterval(uint16_t intervalMS)   { m_autoRepeatMS = intervalMS;   }
-void      InterruptButton::setDoubleClickInterval(uint16_t intervalMS)  { m_doubleClickMS = intervalMS;  }
+void      InterruptButton::setMultiClickInterval(uint16_t intervalMS)  { m_MultiClickMS = intervalMS;  }
 
 
 // -- FUNCTIONS RELATED TO EXTERNAL ACTIONS --------------------------------------------------------------
@@ -429,10 +433,10 @@ void InterruptButton::bind(event_t event, btn_callback_t action, uint8_t menuLev
   btn_actions.add(a);
   m_menu.eventSet(event, true, menuLevel);
 
-  if (m_menu.eventGet(event_t::AutoRepeatKeyPress) || m_menu.eventGet(event_t::LongKeyPress))
+  if (m_menu.eventGet(event_t::autoRepeat) || m_menu.eventGet(event_t::longClick))
     createTimer(timer_event_t::longpress, m_LongPressTimer);
 
-  if (m_menu.eventGet(event_t::MultiClick))
+  if (m_menu.eventGet(event_t::multiClick))
     createTimer(timer_event_t::click, m_ClickTimer);
 }
 
@@ -468,7 +472,7 @@ void InterruptButton::disable(){
   killTimer(m_DebounceTimer);
   killTimer(m_LongPressTimer);
   killTimer(m_ClickTimer);
-  m_state = btnState_t::Undefined;
+  m_state = btnState_t::undefined;
 }
 
 void InterruptButton::setMenuLevel(uint8_t level){
@@ -477,12 +481,12 @@ void InterruptButton::setMenuLevel(uint8_t level){
 
   m_menu.level = level;
 
-  if (m_menu.eventGet(event_t::AutoRepeatKeyPress) || m_menu.eventGet(event_t::LongKeyPress))
+  if (m_menu.eventGet(event_t::autoRepeat) || m_menu.eventGet(event_t::longClick))
     createTimer(timer_event_t::longpress, m_LongPressTimer);
   else
     killTimer(m_LongPressTimer);
 
-  if (m_menu.eventGet(event_t::MultiClick))
+  if (m_menu.eventGet(event_t::multiClick))
     createTimer(timer_event_t::click, m_ClickTimer);
   else
     killTimer(m_ClickTimer);
