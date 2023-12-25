@@ -1,8 +1,8 @@
 #include "Arduino.h"
 #include "InterruptButton.h"
 
-#define BUTTON_1  0                 // gpio for Button 0
-#define BUTTON_2  35                // gpio for Button 1
+#define BUTTON_1  0                 // Top Left or Bottom Right button
+#define BUTTON_2  35                // Bottom Left or Top Right button
 
 //== FUNCTION DECLARATIONS (Necessary if using PlatformIO as it doesn't do function hoisting) ======
 //==================================================================================================
@@ -39,8 +39,10 @@ void menu1Button2MultiClick(void);
 InterruptButton button1(BUTTON_1, LOW);
 InterruptButton* button2;   // object placeholder
 
+using ESPButton::event_t;   // Import enum from a namespace
 
 void setup() {
+  delay(1000); // 3 second delay for recovery
   Serial.begin(115200);
 
   button2 = new InterruptButton(BUTTON_2, LOW);
@@ -58,7 +60,7 @@ void setup() {
   button1.bind(event_t::press,          &menu0Button1press);
   button1.bind(event_t::release,            &menu0Button1release);
   button1.bind(event_t::click,         &menu0Button1keyPress);
-  button1.bind(event_t::longClick,     &menu0Button1longKeyPress);
+  button1.bind(event_t::longPress,     &menu0Button1longKeyPress);
   button1.bind(event_t::autoRepeat,  &menu0Button1AutoRepeatKeyPress);
   button1.bind(event_t::multiClick,       &menu0Button1MultiClick);
 
@@ -66,7 +68,7 @@ void setup() {
   button2->bind(event_t::press,          &menu0Button2press);
   button2->bind(event_t::release,            &menu0Button2release);
   button2->bind(event_t::click,         [](){ Serial.printf("Menu 0, Button 2: click:              [%lu ms]\n", millis()); });  
-  button2->bind(event_t::longClick,     [](){ Serial.printf("Menu 0, Button 2: longClick:          [%lu ms]\n", millis()); });  
+  button2->bind(event_t::longPress,     [](){ Serial.printf("Menu 0, Button 2: longPress:          [%lu ms]\n", millis()); });  
   button2->bind(event_t::autoRepeat,  [](){ Serial.printf("Menu 0, Button 2: AutoRepeat Press:      [%lu ms]\n", millis()); });  
   button2->bind(event_t::multiClick,      [](){ Serial.printf("Menu 0, Button 2: multiClick:           [%lu ms]\n", millis()); });  
 
@@ -78,7 +80,7 @@ void setup() {
   button1.bind(event_t::press,          &menu1Button1press, 1);
   button1.bind(event_t::release,            &menu1Button1release, 1);
   button1.bind(event_t::click,         [](){ Serial.printf("Menu 1, Button 1: click:              [%lu ms]\n", millis()); }, 1);
-  button1.bind(event_t::longClick,     [](){ Serial.printf("Menu 1, Button 1: longClick:          [%lu ms]\n", millis()); }, 1);
+  button1.bind(event_t::longPress,     [](){ Serial.printf("Menu 1, Button 1: longPress:          [%lu ms]\n", millis()); }, 1);
   button1.bind(event_t::autoRepeat,  [](){ Serial.printf("Menu 1, Button 1: AutoRepeat Press:      [%lu ms]\n", millis()); }, 1);
   button1.bind(event_t::multiClick,      &menu1Button1MultiClick);
 
@@ -87,7 +89,7 @@ void setup() {
   button2->bind(event_t::release,           &menu1Button2release, 1);
   button2->bind(event_t::multiClick,     &menu1Button2MultiClick, 1);
   button2->bind(event_t::click,        [](){ Serial.printf("Menu 1, Button 2: click:              [%lu ms]\n", millis()); }, 1);
-  button2->bind(event_t::longClick,    [](){ Serial.printf("Menu 1, Button 2: longClick:          [%lu ms]\n", millis()); }, 1);
+  button2->bind(event_t::longPress,    [](){ Serial.printf("Menu 1, Button 2: longPress:          [%lu ms]\n", millis()); }, 1);
   button2->bind(event_t::autoRepeat, [](){ Serial.printf("Menu 1, Button 2: AutoRepeat Press :     [%lu ms]\n", millis()); }, 1);
   //button2.bind(InterruptButton::SyncMultiClick,  1, [](){ Serial.printf("Menu 1, Button 2: SYNC multiClick:           [%lu ms]\n", millis()); });  
 
