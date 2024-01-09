@@ -1,7 +1,6 @@
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "InterruptButton.h"
-#include "LList.h"
+//#include "freertos/FreeRTOS.h"
+//#include "freertos/queue.h"
+#include "espasyncbutton.hpp"
 
 
 #ifndef IBUTTON_Q_DEPTH
@@ -62,6 +61,8 @@ static esp_event_loop_handle_t ebtn_hndlr = nullptr;
 
 esp_event_loop_handle_t get_evthndlr(){ return ebtn_hndlr; };
 
+void set_event_loop_hndlr( esp_event_loop_handle_t handler){ ebtn_hndlr = handler; };
+
 event_t int2event_t(int32_t e){
   return (e < 0 || e >= IBTN_EVENT_T_SIZE) ? event_t::undefined : static_cast<event_t>(e);
 }
@@ -91,98 +92,33 @@ void stopBtnQTask(){
 
 } // namespace ESPButton
 
+void ButtonCallbackMenu::assign(int32_t gpio, uint32_t menuLevel, btn_callback_t callback){
+  callbacks.emplace_back(EventCallback(menuLevel, gpio, callback));
+}
+
+void ButtonCallbackMenu::deassign(int32_t gpio, uint32_t menuLevel){
+  callbacks.remove_if( ESPButton::MatchEventCallback<EventCallback>(gpio, menuLevel) );
+}
+
+void ButtonCallbackMenu::handleEvent(ESPButton::event_t event, const EventMsg* m){
+  // I need independend copy of _level in case any callback will trigger level change
+  // so to avoid recoursive loop I compare to a local value of _level
+  uint32_t _pendinglevel = _level;
+
+  for (auto &it : callbacks ){
+    //Serial.printf("i.m:%u, i.g:%d,  m:%u,g:%d\n", it.menulvl, it.gpio, _level, m->gpio);
+    if (it.menulvl == _pendinglevel && it.gpio == m->gpio)
+      it.cb(event, m);
+  }
 
 /*
-void BtnMenu::eventSet(event_t evt, bool state, uint8_t menulvl){
-  if (menulvl >= menu.size())
-    menu.resize(menulvl+1);
-
-  menu.at(menulvl).set( static_cast<std::size_t>(evt), state );
-}
-
-bool BtnMenu::eventGet(event_t evt, uint8_t menulvl) const {
-  if (menulvl >= menu.size())
-    return false;
-
-  return menu.at(menulvl).test( static_cast<std::size_t>(evt));
-}
-*/
-
-
-// === GPIOButton methods ===
-//-- Method to monitor button, called by button change and various timer interrupts ----------------------
-#ifdef NOTHING
-void ButtonCallbacks::onEvent(event_t event, btn_callback_t cb, uint8_t menuLevel){
-  auto it = std::find_if(callbacks.begin(), callbacks.end(), MatchEventCallback<EventCallback>(menuLevel, event));
+  auto it = std::find_if(callbacks.begin(), callbacks.end(), MatchEventCallback<EventCallback>(gpio, menuLevel));
   if (it != callbacks.end()){
     it.cb = cb;
-  } else
-    callbacks.emplace_back(EventCallback(event, cb, menuLevel));
-
-/*
-  btnaction_t a = { {_gpio, menuLevel, event}, action};
-  btn_actions.add(a);
-  _menuopts.eventSet(event, true, menuLevel);
-
-  if (_menuopts.eventGet(event_t::autoRepeat) || _menuopts.eventGet(event_t::longPress))
-    createTimer(timer_t::longpress, longPressTimer_h);
-
-  if (_menuopts.eventGet(event_t::multiClick))
-    createTimer(timer_t::click, multiclickTimer_h);
-*/
-}
-
-void ButtonCallbacks::unbind(event_t event, uint8_t menuLevel){
-  callbacks.remove_if(  MatchEventCallback<EventCallback>(menuLevel, event) );
-/*
-  if (!btn_actions.size())    // action list is empty
-    return;
-
-  for (int i = 0; i != btn_actions.size(); ++i){
-    if (btn_actions.get(i).t.gpio == _gpio && btn_actions.get(i).t.event == event && btn_actions.get(i).t.menulvl == menuLevel){
-      _menuopts.eventSet(event, false, menuLevel);
-      btn_actions.remove(i);
-      return;
-    }
   }
 */
 }
 
-void ButtonCallbacks::unbindall(){
-  callbacks.clear();
-/*
-  if (!btn_actions.size())    // action list is empty
-    return;
-
-  int size = btn_actions.size();
-  for (int i = 0; i != size; ++i){
-    if (btn_actions.get(i).t.gpio == _gpio){
-      btn_actions.remove(i);
-      --size;
-      --i;
-    }
-  }
-*/
-}
-
-void ButtonCallbacks::setMenuLevel(uint32_t level){
-  if (level > clicks.size())
-    return;
-
-  _menuopts.level = level;
-
-  if (_menuopts.eventGet(event_t::autoRepeat) || _menuopts.eventGet(event_t::longPress))
-    createTimer(timer_t::longpress, longPressTimer_h);
-  else
-    killTimer(longPressTimer_h);
-
-  if (_menuopts.eventGet(event_t::multiClick))
-    createTimer(timer_t::click, multiclickTimer_h);
-  else
-    killTimer(multiclickTimer_h);
-
-}
-#endif  //NOTHING
 
 // === ESPEventPolicy methods ===
 

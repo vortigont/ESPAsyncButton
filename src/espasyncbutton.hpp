@@ -26,8 +26,6 @@
 #define ESP_INTR_FLAG_DEFAULT         0
 #endif
 
-using btn_callback_t = std::function< void ()>;
-
 
 ESP_EVENT_DECLARE_BASE(EBTN_EVENTS);
 
@@ -35,14 +33,6 @@ static const char* EBTN_TAG = "EBTN";      // IDF log tag
 
 
 namespace ESPButton {
-
-  /**
-   * @brief get ESPButton event loop handler
-   * if if was set previously, otherwise return null
-   * if handler is not set, than events are sent to default system loop
-   * @return esp_event_loop_handle_t 
-   */
-  esp_event_loop_handle_t get_evthndlr();
 
   // Events that button generate on operation
   enum class event_t {
@@ -55,6 +45,21 @@ namespace ESPButton {
     multiClick,             // button has been clicked many times consecutevily (a number of clicks is also reported within the event)
     undefined               // unknown/undefined event
   };
+
+  /**
+   * @brief get ESPButton event loop handler
+   * if if was set previously, otherwise return null
+   * if handler is not set, than events are sent to default system loop
+   * @return esp_event_loop_handle_t 
+   */
+  esp_event_loop_handle_t get_event_loop_hndlr();
+
+  /**
+   * @brief Set ESP Event loop hndlr where to post Button events
+   * by default handler is NULL and events are posted to system default loop
+   * 
+   */
+  void set_event_loop_hndlr( esp_event_loop_handle_t handler);
 
   /**
    * @brief function to convert integer to event_t
@@ -84,18 +89,19 @@ namespace ESPButton {
    */
   template <class T>
   class MatchEventCallback : public std::unary_function<T, bool>{
-      uint32_t _m;
-      event_t _e;
+      int32_t _gpio;
+      uint32_t _menu;
 
   public:
-      explicit MatchEventCallback(uint32_t menu, event_t e) : _m(menu), _e(e) {}
+      explicit MatchEventCallback(uint32_t gpio, uint32_t menu) : _gpio(gpio), _menu(menu) {}
       bool operator() ( T val ){
           // T is struct EventCallback
-          return val.menulvl == _m && val.event == _e;
+          return val.gpio == _gpio && val.menulvl == _menu;
       }
   };
 
 } //namespace ESPButton
+
 
   // momentary button states
   enum class btnState_t {
@@ -123,6 +129,7 @@ namespace ESPButton {
   };
 
 
+using btn_callback_t = std::function< void (ESPButton::event_t event, const EventMsg* msg)>;
 
 /**
  * @brief abstract class that implements "Momentary Button" and it's states
@@ -270,100 +277,6 @@ public:
 };
 
 
-class BtnMenu {
-  uint32_t level{0};
-  std::vector< std::bitset<IBTN_EVENT_T_SIZE> > menu;
-
-public:
-  BtnMenu(size_t size) : menu( std::vector< std::bitset<IBTN_EVENT_T_SIZE> >(size) ) {};
-
-  uint32_t levelSet(uint32_t l){ level = l >= menu.size() ? 0 : l; return level; };
-  uint32_t levelGet(){ return level; };
-
-  void eventSet(ESPButton::event_t evt, bool state, uint32_t menulvl);
-  bool eventGet(ESPButton::event_t evt, uint32_t menulvl) const;
-  void eventSet(ESPButton::event_t evt, bool state){ eventSet(evt, state, level); }
-  bool eventGet(ESPButton::event_t evt) const { return eventGet(evt, level); }
-};
-
-#ifdef SKIP
-/**
- * @brief A generic class that provides callback registration and handling
- * for events recieved from a button direvied classes
- * 
- */
-class ButtonCallbacks {
-protected:
-
-  /**
-   * @brief button event callback structure
-   * menulvl - button's menulevel at the time of event
-   * event - event type
-   * cb - functional callback
-   */
-  struct EventCallback {
-
-    uint32_t menulvl;
-    ESPButton::event_t event;
-    btn_callback_t cb;
-
-    EventCallback(uint32_t menu, ESPButton::event_t e, btn_callback_t c) : menulvl(menu), event(e), cb(c) {};
-    //bool operator== (const btntrigger_t& b) const { return (gpio == b.gpio && menulvl == b.menulvl && event == b.event); };
-  };
-
-
-  // a set of enabled options per menu level
-  BtnMenu _menuopts;
-
-  // a set of assigned callbacks
-  std::list<EventCallback> callbacks;
-
-public:
-  virtual ~ButtonCallbacks(){};
-
-  // gpio mask to handle events for
-  std::bitset<64> gpio_mask{0x0};
-
-  /**
-   * @brief switch current menulevel for the button callbacks
-   * changing menulevel affects handling of LongPress/multiClick events, etc...
-   * 
-   * @param level
-   */
-  void setMenuLevel(uint32_t level);
-
-  // Retrieves current menu level
-  uint32_t getMenuLevel() const { return _menuopts.level; }
-
-  /**
-   * @brief Enable/Disable particalar event type at specific menulevel
-   * 
-   * @param event - event type
-   * @param menulvl - menu level
-   * @param enable - enable/disable state
-   */
-  void setEventState(ESPButton::event_t event, uint8_t menulvl, bool enable){ _menuopts.eventSet( event, menulvl, enable); };
-
-
-  /**
-   * @brief Get event type state at specific menulevel
-   * 
-   * @param event - event type
-   * @param menulvl - menu level
-   */
-  bool getEventState(ESPButton::event_t event, uint8_t menulvl) const { return _menuopts.eventGet( event, menulvl); };
-
-  void onEvent(ESPButton::event_t event, btn_callback_t cb, uint32_t menuLevel = 0);   // Used to bind/unbind action to an event at specified menu level
-  void unbind( ESPButton::event_t event, uint32_t menuLevel = 0);
-
-  /**
-   * @brief remove all action bindings
-   * 
-   */
-  void unbindall();
-};
-#endif // SKIP
-
 /**
  * @brief a policy 
  * 
@@ -452,7 +365,78 @@ public:
   esp_err_t setGPIO(gpio_num_t gpio, bool logicLevel, gpio_pull_mode_t pull = GPIO_PULLUP_ONLY, gpio_mode_t mode = GPIO_MODE_INPUT);
 };
 
+/**
+ * @brief A generic class that provides callback registration and handling
+ * for events recieved from a button direvied classes
+ * 
+ */
+class ButtonCallbackMenu {
+  // current menulevel
+  uint32_t _level{0};
 
+  /**
+   * @brief button event callback structure
+   * menulvl - button's menulevel at the time of event
+   * event - event type
+   * cb - functional callback
+   */
+  struct EventCallback {
+
+    uint32_t menulvl;
+    int32_t gpio;
+    btn_callback_t cb;
+
+    EventCallback(uint32_t lvl, int32_t gpio, btn_callback_t c) : menulvl(lvl), gpio(gpio), cb(c) {};
+    //bool operator== (const btntrigger_t& b) const { return (gpio == b.gpio && menulvl == b.menulvl && event == b.event); };
+  };
+
+  // a set of assigned callbacks
+  std::list<EventCallback> callbacks;
+
+public:
+  //virtual ~ButtonCallbackMenu(){};
+
+  /**
+   * @brief switch current menulevel for the button callbacks
+   * 
+   * @param level
+   */
+  void setMenuLevel(uint32_t level){ _level = level; };
+
+  // Get current menu level
+  uint32_t getMenuLevel() const { return _level; }
+
+  /**
+   * @brief assign functional callback
+   * 
+   * @param gpio - gpio to bind events to
+   * @param menuLevel - menulevel to handle
+   * @param callback - functional callback
+   */
+  void assign(int32_t gpio, uint32_t menuLevel, btn_callback_t callback);
+
+  /**
+   * @brief remove callback for specific gpio/menu
+   * 
+   * @param gpio 
+   * @param menuLevel 
+   */
+  void deassign(int32_t gpio, uint32_t menuLevel);
+
+  /**
+   * @brief remove all action bindings
+   * 
+   */
+  void reset() { callbacks.clear(); };
+
+  /**
+   * @brief Handle ESPButton::event_t Events and execute mapped callback based on current menulevel
+   * 
+   * @param event - ESPButton::event_t 
+   * @param m - event message
+   */
+  void handleEvent(ESPButton::event_t event, const EventMsg* m);
+};
 
 // Templates implementations ----------------------------------------------------
 
@@ -602,8 +586,12 @@ void GenericButton<EventPolicy>::longPressTimeout(){
   if (!ctr.repeat && options.test(static_cast<std::size_t>(ESPButton::event_t::longPress)) )
     sendButtonEvent(e, &m);
 
+  // quit if no autorepeats enabled
+  if (!options.test(static_cast<std::size_t>(ESPButton::event_t::autoRepeat)) )
+    return;
+
   // check if repeat-on-Hold is activated, then run periodic timer
-  if( !ctr.repeat && options.test(static_cast<std::size_t>(ESPButton::event_t::autoRepeat)) ){
+  if( !ctr.repeat ){
     esp_timer_start_periodic(longPressTimer_h, timeouts.autoRepeat * 1000);
     ++ctr.repeat;   // increment repeat counter
     return;
