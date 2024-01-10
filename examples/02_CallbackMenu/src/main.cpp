@@ -7,13 +7,25 @@
 using ESPButton::event_t;
 
 // Buttons
+
+/**
+ * @brief gpio mapped button with Logic level LOW, i.e. button shorts gpio to the ground, gpio must be pulled high
+ * 
+ * @return GPIOButton<ESPEventPolicy> 
+ */
 GPIOButton<ESPEventPolicy> b1(BUTTON_1, LOW);
+
+/**
+ * @brief gpio mapped button with Logic level LOW, i.e. button shorts gpio to the ground, gpio must be pulled high
+ * 
+ * @return GPIOButton<ESPEventPolicy> 
+ */
 GPIOButton<ESPEventPolicy> b2(BUTTON_2, LOW);
 
 // Button callback menu
 ButtonCallbackMenu menu;
 
-// CallBack functions
+// CallBack functions (see below)
 void cursor_control(event_t e, const EventMsg* m);
 void volume_control(event_t e, const EventMsg* m);
 void counters(event_t e, const EventMsg* m);
@@ -64,6 +76,9 @@ void setup(){
     // enable buttons
     b1.enable();
     b2.enable();
+
+    // print a hint
+    Serial.print("Use LongPress to toggle menu function, single press to adjust value");
 }
 
 void loop(){
@@ -74,7 +89,8 @@ void loop(){
 
 // this function will toggle menu level on any button longPress
 void menu_toggle(){
-    menu.setMenuLevel( (menu.getMenuLevel()+1)%4 );
+    // switch menu 0-2
+    menu.setMenuLevel( (menu.getMenuLevel()+1)%3 );
     // on menu level 2 we will enable autorepeat for  button_1 and multiclick counter for button_2
     if (menu.getMenuLevel() == 2){
         b1.enableEvent(event_t::autoRepeat);
@@ -107,7 +123,7 @@ void volume_control(event_t e, const EventMsg* m){
         case event_t::click :
             Serial.print("Volume "); Serial.println(m->gpio == BUTTON_1 ? "Up" : "Down");
             break;
-        // any button longpress event will cycle menu level 0->1->2->3->0
+        // any button longpress event will cycle menu level 0->1->2->0
         case event_t::longPress :
             menu_toggle();
             break;
