@@ -1,20 +1,26 @@
 {
-    "name": "InterruptButton",
-    "description": "Interrupt driven events for hardware buttons",
+    "name": "ESPAsyncButton",
+    "description": "Event-driven asynchronous button toolkit for ESP32",
+    "frameworks": "arduino",
+    "platforms": ["espressif32"],
+    "url": "https://github.com/vortigont/ESPAsyncButton",
+    "version": "1.0.0",
     "keywords": "ïnterrupt, button, event",
     "authors": [
+        {                                                                                                                                                     
+            "name": "Emil Muratov",                                                                                                                           
+            "url": "https://github.com/vortigont",
+            "email": "gpm@hotplug.ru",
+            "maintainer": true
+        },
         {
             "name": "R. Mingis",
-            "maintainer": true
+            "url": "https://github.com/rwmingis"
         }
     ],
+    "license": "LGPL-2.1-or-later",
     "repository": {
         "type": "git",
-         "url": "https://github.com/rwmingis/InterruptButton"
-    },
-    "version": "1.0.0",
-    "frameworks": "Arduino",
-    "examples": [
-        "examples/*.ino"
-    ]
+         "url": "https://github.com/rwmingis/ESPAsyncButton.git"
+    }
 }
