@@ -8,7 +8,11 @@ This project has started as a fork of [rwmingis/InterruptButton](https://github.
  * Interrupts + HW timers are used to register button press/release and generate events
  * button event propagation and handling via ESP Event loop
  * gpios and event processing are decoupled from each other, i.e. it is possible to handle multiple gpios from a single handler
- * selectable button behavior, from simple `press`/`release` to featured `autorepeat`, `multiclicks`, and other
+ * selectable button behavior
+   - defult is `press`/`release`
+   - `longPress`, `longRelease` events could be enabled on button hold
+   -   `autorepeat` events while button is on hold
+   -   `click`, `multiclick` events for any number of consecutive short clicks counting
  * policy-based class templates to easy integrate user-defined event handlers 
 
 ## Operation states
@@ -25,7 +29,25 @@ If `LongPress`/`LongRelease` events are enabled, then each time button is presse
 
 Timeline events diagram:
 
-![short/long press](short_press.svg)
+![short/long press diagram](images/short_press.svg)
+
+### Autorepeat event
+
+Autorepeat event generation might be enabled to generate events periodically while button is kept in pressed state. I.e. to repeat some action like if the button was continously pressed and released. This could be used for scrolling, step-by-step increments, etc...
+
+Timeline events diagram:
+
+![autorepeat events diagram](images/autorepeat.svg)
+
+### Click/MultiClick events
+
+Click/Multiclick events are enabled disabled independetly. `Click` is just a short press/release and generated on button release. `Longpress` does not generate `Click` event. `MulttiClicks` could be enabled if you need to differentiate events like 2 or more consecutive key press/release counts.
+Once single click is complete, button waits for `TimeOuts::multiClick` ms, if no more consecutive clicks where performed then multiclick event is generated with additional counter value. Any number of consecutive clicks could be executed.
+
+Timeline events diagram:
+
+![autorepeat events diagram](images/multiclick.svg)
+
 
 #### Thanks
 Thanks to [R. Mingis](https://github.com/rwmingis) for his original lib and inspiration for this project.
