@@ -191,7 +191,7 @@ protected:
    * @brief virtual gpio
    * a virtual gpio for the button, could be mapped to real gpio or arbitraty gpio id
    */
-  int vgpio{-1};
+  int32_t vgpio{-1};
 
   /**
    * @brief Button's logical state
@@ -250,6 +250,14 @@ public:
   btnState_t getState() const { return _state; };
 
   /**
+   * @brief return virtual GPIO number
+   * virtual gpio is just an identifier for the button instance, it migh (or might not) be a real gpio
+   * 
+   * @return int32_t 
+   */
+  int32_t getGPIO() const { return vgpio; };
+
+  /**
    * @brief enable/disable generation of specific event types
    * by default only event_t::press and event_t::release are generated
    * @param e - event type
@@ -300,9 +308,9 @@ template<class EventPolicy = ESPEventPolicy>
 class GPIOButton : public GenericButton<EventPolicy> {
 
   gpio_num_t _gpio = GPIO_NUM_NC;                                         // Button gpio
+  bool _gpio_ll;                                                          // Logic Level of a button when it is pressed (LOW or HIGH)
   gpio_pull_mode_t _gpioPull;                                             // gpio pull mode
   gpio_mode_t _gpioMode;                                                  // GPIO mode: IDF's input/output mode
-  bool _gpio_ll;                                                           // Logic Level of a button when it is pressed (LOW or HIGH)
   bool _debounce;                                                         // enable debounce for GPIO
   uint32_t _ctr_debounce;                                                 // debounce counter
 
@@ -363,6 +371,11 @@ public:
    * @return esp_err_t 
    */
   esp_err_t setGPIO(gpio_num_t gpio, bool logicLevel, gpio_pull_mode_t pull = GPIO_PULLUP_ONLY, gpio_mode_t mode = GPIO_MODE_INPUT);
+
+  void setDebounce(bool debounce){ disable(); _debounce = debounce; enable(); };
+
+  bool getDebounce(){ return _debounce; };
+
 };
 
 /**
