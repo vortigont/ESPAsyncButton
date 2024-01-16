@@ -519,10 +519,10 @@ void GenericButton<EventPolicy>::checkState(){
       }
 
       EventMsg m{ vgpio, 0};
-      if ( options.test(static_cast<std::size_t>(ESPButton::event_t::release)) )
+      if ( options.test(static_cast<std::size_t>(ESPButton::event_t::longRelease)) )
         sendButtonEvent(ESPButton::event_t::longRelease, &m);
 
-      _state = btnState_t::idle;                                              // change button state to 'release' and wait for next press/click
+      _state = btnState_t::idle;                                              // change button state to 'idle' and wait for next press/click
       break;
     }
     default:;
