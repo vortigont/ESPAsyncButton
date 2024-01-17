@@ -590,6 +590,8 @@ void GenericButton<EventPolicy>::_deleteTimer(ESPButton::event_t tevent){
 //-- Method to handle longKeyPresses (called by timer)----------------------------------------------------
 template<class EventPolicy>
 void GenericButton<EventPolicy>::longPressTimeout(){
+  // check if we are in proper state
+  //if (_state != btnState_t::onHold || _state != btnState_t::onLongHold) return;
   _state = btnState_t::onLongHold;
   EventMsg m{ vgpio, 0};
 
@@ -704,32 +706,37 @@ esp_err_t GPIOButton<EventPolicy>::enable(){
 
 template<class EventPolicy>
 void GPIOButton<EventPolicy>::_gpio_isr(){
-  switch(this->_state){
-    case btnState_t::idle:                                            // Was sitting idle but just detected a signal from the button
-      this->_state = _debounce ? btnState_t::pressDebounce : btnState_t::pressed;
-      break;
-    case btnState_t::onHold:
-    case btnState_t::pressed:
-      this->_state = _debounce ? btnState_t::releaseDebounce : btnState_t::released;
-      break;
-    case btnState_t::onLongHold:
-      this->_state = _debounce ? btnState_t::releaseLongDebounce : btnState_t::releasedLong;
-      break;
-    default:
-      // have an interrupt while in a wrong state, disable interrupts and leave it
-      ESP_LOGD(EBTN_TAG, "isr err state %u", static_cast<unsigned>(this->_state));
-      return;
-  }
-
-  if (this->_state == btnState_t::pressed || this->_state == btnState_t::released || this->_state == btnState_t::releasedLong ){
-    // process state change
-    this->checkState();
-  } else {
+  if (_debounce){
+    switch(this->_state){
+      case btnState_t::idle:                                            // Was sitting idle but just detected a signal from the button
+        this->_state = btnState_t::pressDebounce;
+        break;
+      case btnState_t::onHold:
+      case btnState_t::pressed:
+        this->_state = btnState_t::releaseDebounce;
+        break;
+      case btnState_t::onLongHold:
+        this->_state = btnState_t::releaseLongDebounce;
+        break;
+      default:
+        // have an interrupt while in a wrong state, disable interrupts and leave it
+        ESP_LOGW(EBTN_TAG, "isr err state %u", static_cast<unsigned>(this->_state));
+        return;
+    }
     // proceed with debounce polling
     gpio_intr_disable(_gpio);                                         // disable gpio ISR while we poll for a valid press (debouncer)
     _ctr_debounce = 0;
     if (debounceTimer_h)
       esp_timer_start_periodic(debounceTimer_h, this->timeouts.debounce / IBTN_DEBOUNCE_CNT);
+
+  } else {
+    // if no debounce required
+    if (gpio_get_level(_gpio) == _gpio_ll){
+      this->_state = btnState_t::pressed;
+    } else {
+      this->_state = this->_state == btnState_t::onLongHold ? btnState_t::releasedLong : btnState_t::released;
+    }
+    this->checkState();
   }
 }
 
