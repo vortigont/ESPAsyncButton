@@ -1,0 +1,63 @@
+# Build examples with Platformio
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+# https://docs.platformio.org/en/latest/integration/ci/github-actions.html
+
+name: PlatformIO CI
+
+on:
+  push:
+#    branches: [ main ]
+    paths:
+    - '**.cpp'
+    - '**.hpp'
+    - '**.h'
+    - '**.c'
+    - '**.ini'
+    - '**.yml'
+  pull_request:
+#    branches: [ main ]
+    paths:
+    - '**.cpp'
+    - '**.hpp'
+    - '**.h'
+    - '**.c'
+    - '**.ini'
+    - '**.yml'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 2
+      matrix:
+        example:
+          - "examples/01_BasicExample"
+          - "examples/02_CallbackMenu"
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: PIO Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+          #restore-keys: |
+          #  ${{ runner.os }}-pio
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install Platformio
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
+          #platformio pkg update
+      - name: PIO build
+        env: 
+          PLATFORMIO_CI_SRC: ${{ matrix.example }}
+        run: |
+          cd ${{ matrix.example }} && platformio run -e example
+          #pio ci -c ${{ matrix.example }}/platformio.ini
