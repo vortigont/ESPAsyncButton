@@ -129,4 +129,7 @@ void ESPEventPolicy::event(ESPButton::event_t e, EventMsg *msg){
     esp_event_post(EBTN_EVENTS, static_cast<int32_t>(e), msg, sizeof(EventMsg), portMAX_DELAY);
 }
 
-
+void TimeOuts::setDebounce( uint32_t us ){
+  debounce = us < IBTN_DEBOUNCE_MIN_TIME_US ? IBTN_DEBOUNCE_MIN_TIME_US : us;
+  debounce = us > IBTN_DEBOUNCE_MAX_TIME_US ? IBTN_DEBOUNCE_MAX_TIME_US : us;
+}

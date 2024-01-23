@@ -14,13 +14,18 @@
 #include "esp_log.h"
 #endif
 
-#define IBTN_LONG_PRESS_TIME_MS     750
-#define IBTN_AUTO_REPEAT_TIME_MS    250
-#define IBTN_MULTI_CLICK_TIME_MS    350
-#define IBTN_DEBOUNCE_TIME_US       5000      // polling interval for debouncer
-#define IBTN_DEBOUNCE_CNT           5         // number of consecutive readouts with the same value for the pin to be considered as debounced
-#define IBTN_DEFAULT_MENU_DEPTH     3         // default menu level depth (flags bitvector length)
-#define IBTN_EVENT_T_SIZE           8         // size of the bitvector for button options (must be >= max of ESPButton::event_t)
+#define IBTN_LONG_PRESS_TIME_MS       750
+#define IBTN_LONG_PRESS_MIN_TIME_MS   250       // minimal time for longPress
+#define IBTN_AUTO_REPEAT_TIME_MS      250
+#define IBTN_AUTO_REPEAT_MIN_TIME_MS  50        // minimal time between autorepeat events
+#define IBTN_MULTI_CLICK_TIME_MS      350
+#define IBTN_MULTI_CLICK_MIN_TIME_MS  100
+#define IBTN_DEBOUNCE_TIME_US         5000      // polling interval for debouncer
+#define IBTN_DEBOUNCE_MIN_TIME_US     1000      // min interval for debouncer
+#define IBTN_DEBOUNCE_MAX_TIME_US     20000     // max interval for debouncer
+#define IBTN_DEBOUNCE_CNT             5         // number of consecutive readouts with the same value for the pin to be considered as debounced
+
+#define IBTN_EVENT_T_SIZE             8         // size of the bitvector for button options (must be >= max of ESPButton::event_t)
 
 #ifndef ESP_INTR_FLAG_DEFAULT
 #define ESP_INTR_FLAG_DEFAULT         0
@@ -29,7 +34,7 @@
 
 ESP_EVENT_DECLARE_BASE(EBTN_EVENTS);
 
-static const char* EBTN_TAG = "EBTN";      // IDF log tag
+static const char* EBTN_TAG = "EBTN";           // IDF log tag
 
 
 namespace ESPButton {
@@ -131,6 +136,26 @@ namespace ESPButton {
 
 using btn_callback_t = std::function< void (ESPButton::event_t event, const EventMsg* msg)>;
 
+class TimeOuts
+{
+  uint32_t debounce{IBTN_DEBOUNCE_TIME_US};           // gpio debounce timeout, us
+  uint32_t longPress{IBTN_LONG_PRESS_TIME_MS};        // how long to hold a button to consider it as a longPress, ms
+  uint32_t autoRepeat{IBTN_AUTO_REPEAT_TIME_MS};      // autorepeat interval, ms
+  uint32_t multiClick{IBTN_MULTI_CLICK_TIME_MS};      // time between consecutive keypress when it's considered as multiple clicks, ms
+
+public:
+  uint32_t getDebounce() const { return debounce; };
+  uint32_t getLongPress() const { return longPress; };
+  uint32_t getAutoRepeat() const { return autoRepeat; };
+  uint32_t getMultiClick() const { return multiClick; };
+
+  void setDebounce( uint32_t us );
+  void setLongPress( uint32_t ms ){ longPress = ms < IBTN_LONG_PRESS_MIN_TIME_MS ? IBTN_LONG_PRESS_MIN_TIME_MS : ms; };
+  void setAutoRepeat( uint32_t ms ){ autoRepeat = ms < IBTN_AUTO_REPEAT_MIN_TIME_MS ? IBTN_AUTO_REPEAT_MIN_TIME_MS : ms; };
+  void setMultiClick( uint32_t ms ){ multiClick = ms < IBTN_MULTI_CLICK_MIN_TIME_MS ? IBTN_MULTI_CLICK_MIN_TIME_MS : ms; };
+
+};
+
 /**
  * @brief abstract class that implements "Momentary Button" and it's states
  * it contains timers and variables to track button state changes but does not has
@@ -177,14 +202,6 @@ protected:
   {
     int8_t click{0};        // click counter
     int8_t repeat{0};       // repeat counter
-  };
-
-  struct TimeOuts
-  {
-    uint32_t debounce{IBTN_DEBOUNCE_TIME_US};           // gpio debounce timeout, us
-    uint32_t longPress{IBTN_LONG_PRESS_TIME_MS};        // how long to hold a button to consider it as a longPress, ms
-    uint32_t autoRepeat{IBTN_AUTO_REPEAT_TIME_MS};      // autorepeat interval, ms
-    uint32_t multiClick{IBTN_MULTI_CLICK_TIME_MS};      // time between consecutive keypress when it's considered as multiple clicks, ms
   };
 
   /**
@@ -475,7 +492,7 @@ void GenericButton<EventPolicy>::checkState(){
       }
       // run log-press timer once if LogPress or AutoRepeat actions are enabled
       if ( options.test(static_cast<std::size_t>(ESPButton::event_t::longPress)) || options.test(static_cast<std::size_t>(ESPButton::event_t::autoRepeat)) ){
-        esp_timer_start_once(longPressTimer_h, timeouts.longPress * 1000);
+        esp_timer_start_once(longPressTimer_h, timeouts.getLongPress() * 1000);
       }
 
       break;
@@ -500,7 +517,7 @@ void GenericButton<EventPolicy>::checkState(){
       // check if multiclicks are enabled
       if ( options.test(static_cast<std::size_t>(ESPButton::event_t::multiClick)) ){
         esp_timer_stop(multiclickTimer_h);                                    // (re)start click timer
-        esp_timer_start_once(multiclickTimer_h, timeouts.multiClick * 1000);
+        esp_timer_start_once(multiclickTimer_h, timeouts.getMultiClick() * 1000);
         ++ctr.click;                                                          // increment click counter
         // go wait for either more clicks or multiclick timer expired
       } else {
@@ -607,7 +624,7 @@ void GenericButton<EventPolicy>::longPressTimeout(){
 
   // check if repeat-on-Hold is activated, then run periodic timer
   if( !ctr.repeat ){
-    esp_timer_start_periodic(longPressTimer_h, timeouts.autoRepeat * 1000);
+    esp_timer_start_periodic(longPressTimer_h, timeouts.getAutoRepeat() * 1000);
     ++ctr.repeat;   // increment repeat counter
     return;
   }
@@ -727,7 +744,7 @@ void GPIOButton<EventPolicy>::_gpio_isr(){
     gpio_intr_disable(_gpio);                                         // disable gpio ISR while we poll for a valid press (debouncer)
     _ctr_debounce = 0;
     if (debounceTimer_h)
-      esp_timer_start_periodic(debounceTimer_h, this->timeouts.debounce / IBTN_DEBOUNCE_CNT);
+      esp_timer_start_periodic(debounceTimer_h, this->timeouts.getDebounce() / IBTN_DEBOUNCE_CNT);
 
   } else {
     // if no debounce required
