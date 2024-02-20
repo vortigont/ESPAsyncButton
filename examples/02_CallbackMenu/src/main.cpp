@@ -16,19 +16,42 @@ using ESPButton::event_t;
 GPIOButton<ESPEventPolicy> b1(BUTTON_1, LOW);
 
 /**
+ * @brief GPIOButton object construtor has the following parameters
+ * 
+ * @param gpio - GPIO number
+ * @param logicLevel - Logic level that ping reads when button is in PRESSED state, LOW or HIGHT 
+ * @param pull - GPIO pull mode as defined in https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv416gpio_pull_mode_t
+ * @param mode - GPIO mode as defined in https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv411gpio_mode_t
+ * @param debounce = enable/disable debounce feature
+
+    GPIOButton(gpio_num_t gpio, bool logicLevel, gpio_pull_mode_t pull = GPIO_PULLUP_ONLY, gpio_mode_t mode = GPIO_MODE_INPUT, bool debounce = true);
+ */
+
+
+/**
  * @brief gpio mapped button with Logic level LOW, i.e. button shorts gpio to the ground, gpio must be pulled high
  * 
  * @return GPIOButton<ESPEventPolicy> 
  */
 GPIOButton<ESPEventPolicy> b2(BUTTON_2, LOW);
 
-// Button callback menu
+/**
+ * @brief Button callback menu object
+ * it will maintain callback options for a group of button events
+ * 
+ */
 ButtonCallbackMenu menu;
 
 // CallBack functions (see below)
+
+// an example function, pretend it could move a cursor via on-screeen menu
 void cursor_control(event_t e, const EventMsg* m);
+
+// an example function, pretend it could control sound volume for some device
 void volume_control(event_t e, const EventMsg* m);
+// an example function, it will just show click counts
 void counters(event_t e, const EventMsg* m);
+// this function will toggle menu levels based on special button evetns
 void menu_toggle();
 
 
@@ -60,16 +83,20 @@ void setup(){
     b1.enableEvent(event_t::longPress);
     b2.enableEvent(event_t::longPress);
 
-    // assign callback functions
-    // I can assign same callbacks to different gpios and deal with each button later
+    // assign callback functions to Menu
+    // I can assign same callbacks to different gpios
+    // which button has triggered the event I can figure out in the event message struct and deal with each button sepparately
+    // so this way we can process multiple buttons in a single context and code different scenarios and button combinations
 
-    // menu 0
+    // menu  level 0 - assign Cursol control function (there is no cursor, we just pretend)
     menu.assign(BUTTON_1, 0, cursor_control);
     menu.assign(BUTTON_2, 0, cursor_control);
-    // menu 1
+
+    // menu  level 1 - assign Volume control function (there is no sound, we just pretend)
     menu.assign(BUTTON_1, 1, volume_control);
     menu.assign(BUTTON_2, 1, volume_control);
-    // menu 2
+
+    // menu  level 3 - assign click counters function
     menu.assign(BUTTON_1, 2, counters);
     menu.assign(BUTTON_2, 2, counters);
 
@@ -78,7 +105,7 @@ void setup(){
     b2.enable();
 
     // print a hint
-    Serial.print("Use LongPress to toggle menu function, single press to adjust value");
+    Serial.print("Use LongPress to toggle menu levels, single press to do action");
 }
 
 void loop(){
@@ -87,26 +114,30 @@ void loop(){
 }
 
 
-// this function will toggle menu level on any button longPress
+// this function will toggle menu-level on any button longPress
 void menu_toggle(){
-    // switch menu 0-2
+    // cycle switch menu leveles 0->1->2->0 ...
     menu.setMenuLevel( (menu.getMenuLevel()+1)%3 );
+
     // on menu level 2 we will enable autorepeat for  button_1 and multiclick counter for button_2
     if (menu.getMenuLevel() == 2){
         b1.enableEvent(event_t::autoRepeat);
         b2.enableEvent(event_t::multiClick);
     } else {
+        // on other levels but 2 we disable it
         b1.enableEvent(event_t::autoRepeat, false);
         b2.enableEvent(event_t::multiClick, false);
     }
     Serial.print("Switched to menu level:"); Serial.println(menu.getMenuLevel());
 };
 
-// this function will pretend its moving a cursor
+// this function will pretend its moving a cursor, but it will just print a message to Serial
 void cursor_control(event_t e, const EventMsg* m){
     switch(e){
         // Use click event to move cursor Up and Down (just print)
         case event_t::click :
+            // we catch all 'click' events and check witch gpio triggered it
+            // BUTTON_1 will move cursolr "Up", BUTTON_2 will move it "down"
             Serial.print("Cursor "); Serial.println(m->gpio == BUTTON_1 ? "Up" : "Down");
             break;
         // any button longpress event will cycle menu level 0->1->2->3->0
@@ -135,18 +166,21 @@ void counters(event_t e, const EventMsg* m){
     switch(e){
     // on a single click we will instruct user to do something more with buttons
     case event_t::click :
-        if (m->gpio == BUTTON_1) Serial.println("Hold button1 for autorepeat...");
-        else Serial.println("Single click is not that fun, try double or triple clicks...");
+        if (m->gpio == BUTTON_1)
+            Serial.println("Hold button1 for autorepeat...");
+        else
+            Serial.println("Single click is not that fun, try double or triple clicks...");
         break;
     // autorepeat action
     case event_t::autoRepeat :
+        // just print "*" on each autorepeat event
         Serial.print("*");
         break;
     // multiclicks
     case event_t::multiClick :
         Serial.printf("gpio: %d clicked %u times. ", m->gpio, m->cntr);
-        Serial.println("Click 5 times to exit to menu 0");
-        // toggle menu on 5th clicks
+        Serial.println("Click 5 times to exit to menu level 0");
+        // toggle menu on 5th click
         if (m->cntr == 5)
             menu_toggle();
         break;
