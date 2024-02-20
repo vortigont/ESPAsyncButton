@@ -5,10 +5,10 @@
     "platforms": ["espressif32"],
     "url": "https://github.com/vortigont/ESPAsyncButton",
     "version": "1.0.0",
-    "keywords": "ïnterrupt, button, event",
+    "keywords": "input, button, event",
     "authors": [
-        {                                                                                                                                                     
-            "name": "Emil Muratov",                                                                                                                           
+        {
+            "name": "Emil Muratov",
             "url": "https://github.com/vortigont",
             "email": "gpm@hotplug.ru",
             "maintainer": true
@@ -22,5 +22,18 @@
     "repository": {
         "type": "git",
          "url": "https://github.com/rwmingis/ESPAsyncButton.git"
+    },
+    "export": {
+        "include":
+        [
+            "examples/*",
+            "src/*",
+            "CHANGELOG.md",
+            "README.md",
+            "CMakeLists.txt",
+            "library.json",
+            "library.properties",
+            "LICENSE"
+        ]
     }
 }
