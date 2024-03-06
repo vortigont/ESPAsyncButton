@@ -168,9 +168,9 @@ class GenericButton {
   EventPolicy _eventPolicy;
 
   // Instance specific timer for button longPress and autoRepeat timing
-  esp_timer_handle_t longPressTimer_h;
+  esp_timer_handle_t longPressTimer_h = nullptr;
   // timer for counting consecutive clicks
-  esp_timer_handle_t multiclickTimer_h;
+  esp_timer_handle_t multiclickTimer_h = nullptr;
   // long-press timer instance count
   uint32_t _lpcnt{0};
   // multiclick timer instance count
