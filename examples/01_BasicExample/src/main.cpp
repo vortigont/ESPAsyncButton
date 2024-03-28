@@ -23,6 +23,18 @@ static constexpr std::array<const char *, 8> event_name = {
 // Buttons
 
 /**
+ * @brief GPIOButton object construtor has the following parameters
+ * 
+ * @param gpio - GPIO number
+ * @param logicLevel - Logic level state of the gpio when button is in 'PRESSED' state, LOW or HIGHT
+ * @param pull - GPIO pull mode as defined in   https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv416gpio_pull_mode_t
+ * @param mode - GPIO mode as defined in        https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv411gpio_mode_t
+ * @param debounce = enable/disable debounce feature for gpio
+
+    GPIOButton(gpio_num_t gpio, bool logicLevel, gpio_pull_mode_t pull = GPIO_PULLUP_ONLY, gpio_mode_t mode = GPIO_MODE_INPUT, bool debounce = true);
+ */
+
+/**
  * @brief gpio mapped button with Logic level LOW, i.e. button shorts gpio to the ground, gpio must be pulled high
  * 
  * @return GPIOButton<ESPEventPolicy> 
@@ -35,6 +47,17 @@ GPIOButton<ESPEventPolicy> b1(BUTTON_1, LOW);
  * @return GPIOButton<ESPEventPolicy> 
  */
 GPIOButton<ESPEventPolicy> b2(BUTTON_2, LOW);
+
+/*
+    We can also configure various button/gpio timeouts on how fast/slow Button
+    reacts to click/multiclick evets, etc..
+
+    b1.timeouts.setDebounce(t)  -   debounce    time in microseconds, default is 5000
+    b1.timeouts.setLongPress(t) -   LongPress   timeout in milliseconds, how long you need to hold the button for it to trigger LongPress event
+    b1.timeouts.setAutoRepeat   -   AutoRepeat  timeout in milliseconds, how fast the button will generate 'autorepeat' events when held down
+    b1.timeouts.setMultiClick   -   MultiClick  timeout in milliseconds, how long Button will wait for consecutive clicks before triggering MultiClick event
+*/
+
 
 /**
  * @brief function declaration that will subsribe to the button events
@@ -50,20 +73,21 @@ void evt_hndlr(void* handler_args, esp_event_base_t base, int32_t id, void* even
 
 void setup(){
     Serial.begin(115200);
-    // We MUST create default ESP event loop unless WiFi or Bluetooth is used
+    // We MUST create default event loop unless WiFi or Bluetooth is used
+    // you do not need to call this if your scketch includes any WiFi/BT setup functions
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     // subscribe our callback function to button events
     ESP_ERROR_CHECK(esp_event_handler_instance_register(EBTN_EVENTS, ESP_EVENT_ANY_ID, evt_hndlr, NULL, NULL));
 
-    // let's enable ALL events for button 1
+    // let's enable ALL events for button 'one'
     b1.enableEvent(event_t::click);
     b1.enableEvent(event_t::longPress);
     b1.enableEvent(event_t::longRelease);
     b1.enableEvent(event_t::autoRepeat);
     b1.enableEvent(event_t::multiClick);
 
-    // for button two in addition to basic 'press', 'release' we will enable only multiClicks
+    // for button 'two' in addition to basic 'press' and 'release' we will enable only 'multiClicks'
     b2.enableEvent(event_t::multiClick);
 
     // enable buttons
@@ -72,7 +96,7 @@ void setup(){
 }
 
 void loop(){
-    // Simply do nothing here
+    // Simply do nothing here, all button events are processed asynchronously
     delay(1000);
 }
 

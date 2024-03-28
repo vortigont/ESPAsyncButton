@@ -9,20 +9,13 @@ using ESPButton::event_t;
 // Buttons
 
 /**
- * @brief gpio mapped button with Logic level LOW, i.e. button shorts gpio to the ground, gpio must be pulled high
- * 
- * @return GPIOButton<ESPEventPolicy> 
- */
-GPIOButton<ESPEventPolicy> b1(BUTTON_1, LOW);
-
-/**
  * @brief GPIOButton object construtor has the following parameters
  * 
  * @param gpio - GPIO number
- * @param logicLevel - Logic level that ping reads when button is in PRESSED state, LOW or HIGHT 
- * @param pull - GPIO pull mode as defined in https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv416gpio_pull_mode_t
- * @param mode - GPIO mode as defined in https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv411gpio_mode_t
- * @param debounce = enable/disable debounce feature
+ * @param logicLevel - Logic level state of the gpio when button is in 'PRESSED' state, LOW or HIGHT
+ * @param pull - GPIO pull mode as defined in   https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv416gpio_pull_mode_t
+ * @param mode - GPIO mode as defined in        https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv411gpio_mode_t
+ * @param debounce = enable/disable debounce feature for gpio
 
     GPIOButton(gpio_num_t gpio, bool logicLevel, gpio_pull_mode_t pull = GPIO_PULLUP_ONLY, gpio_mode_t mode = GPIO_MODE_INPUT, bool debounce = true);
  */
@@ -33,7 +26,24 @@ GPIOButton<ESPEventPolicy> b1(BUTTON_1, LOW);
  * 
  * @return GPIOButton<ESPEventPolicy> 
  */
+GPIOButton<ESPEventPolicy> b1(BUTTON_1, LOW);
+
+/**
+ * @brief gpio mapped button with Logic level LOW, i.e. button shorts gpio to the ground, gpio must be pulled high
+ * 
+ * @return GPIOButton<ESPEventPolicy> 
+ */
 GPIOButton<ESPEventPolicy> b2(BUTTON_2, LOW);
+
+/*
+    We can also configure various button/gpio timeouts on how fast/slow Button
+    reacts to click/multiclick evets, etc..
+
+    b1.timeouts.setDebounce(t)  -   debounce    time in microseconds, default is 5000
+    b1.timeouts.setLongPress(t) -   LongPress   timeout in milliseconds, how long you need to hold the button for it to trigger LongPress event
+    b1.timeouts.setAutoRepeat   -   AutoRepeat  timeout in milliseconds, how fast the button will generate 'autorepeat' events when held down
+    b1.timeouts.setMultiClick   -   MultiClick  timeout in milliseconds, how long Button will wait for consecutive clicks before triggering MultiClick event
+*/
 
 /**
  * @brief Button callback menu object
@@ -42,7 +52,7 @@ GPIOButton<ESPEventPolicy> b2(BUTTON_2, LOW);
  */
 ButtonCallbackMenu menu;
 
-// CallBack functions (see below)
+// Declaring CallBack functions (see below for function definitions)
 
 // an example function, pretend it could move a cursor via on-screeen menu
 void cursor_control(event_t e, const EventMsg* m);
@@ -55,12 +65,14 @@ void counters(event_t e, const EventMsg* m);
 void menu_toggle();
 
 
+// Arduino's setup()
 void setup(){
     Serial.begin(115200);
-    // We must create default event loop unless WiFi or Bluetooth is used
+    // We MUST create default event loop unless WiFi or Bluetooth is used
+    // you do not need to call this if your scketch includes any WiFi/BT setup functions
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // attach to system event loop to listen for button evnts
+    // attach our Menu callback handler to system event loop to listen for button events
     ESP_ERROR_CHECK(esp_event_handler_instance_register(EBTN_EVENTS,
                                                         ESP_EVENT_ANY_ID,
                                                         // this lambda will simply translate loop events into btn_callback_t callback function
@@ -70,10 +82,10 @@ void setup(){
                                                         NULL, NULL) );
 
     // disable simple press/release events, we do not need them
-    b1.enableEvent(event_t::press, false);
-    b1.enableEvent(event_t::release, false);
-    b2.enableEvent(event_t::press, false);
-    b2.enableEvent(event_t::release, false);
+    b1.enableEvent(event_t::press,      false);
+    b1.enableEvent(event_t::release,    false);
+    b2.enableEvent(event_t::press,      false);
+    b2.enableEvent(event_t::release,    false);
 
     // enable clicks
     b1.enableEvent(event_t::click);
@@ -131,23 +143,23 @@ void menu_toggle(){
     Serial.print("Switched to menu level:"); Serial.println(menu.getMenuLevel());
 };
 
-// this function will pretend its moving a cursor, but it will just print a message to Serial
+// Let's pretend that this function is moving some cursor, but we will just print a message to Serial here as an example
 void cursor_control(event_t e, const EventMsg* m){
     switch(e){
-        // Use click event to move cursor Up and Down (just print)
+        // Use click event to move cursor Up and Down (just print message)
         case event_t::click :
-            // we catch all 'click' events and check witch gpio triggered it
-            // BUTTON_1 will move cursolr "Up", BUTTON_2 will move it "down"
+            // we catch all 'click' events and check which gpio triggered it
+            // BUTTON_1 will move cursor "Up", BUTTON_2 will move it "down"
             Serial.print("Cursor "); Serial.println(m->gpio == BUTTON_1 ? "Up" : "Down");
             break;
-        // any button longpress event will cycle menu level 0->1->2->3->0
+        // any button's longpress event will cycle menu level 0->1->2->3->0
         case event_t::longPress :
             menu_toggle();
             break;
     }
 };
 
-// this function will pretend its changing volume
+// Let's pretend that this function  is changing volume, but we just print messages here
 void volume_control(event_t e, const EventMsg* m){
     switch(e){
         // Use click event to control Volume Up and Down (just print)
@@ -167,7 +179,7 @@ void counters(event_t e, const EventMsg* m){
     // on a single click we will instruct user to do something more with buttons
     case event_t::click :
         if (m->gpio == BUTTON_1)
-            Serial.println("Hold button1 for autorepeat...");
+            Serial.println("Hold button 1 for autorepeat...");
         else
             Serial.println("Single click is not that fun, try double or triple clicks...");
         break;
@@ -185,7 +197,12 @@ void counters(event_t e, const EventMsg* m){
             menu_toggle();
         break;
     }
-    // since we use autorepeat here we can no longer use longPress to toggle menu, because autorepeat is triggered after longPress
+
+    /**
+     * since we are using autorepeat above for astesk printing, we can no longer use 'longPress' event to toggle menu, because 'autorepeat' is triggered after 'longPress' event
+       so, let's disable it
+    */
+
     //case event_t::longPress :
     //    menu_toggle();
     //    break;

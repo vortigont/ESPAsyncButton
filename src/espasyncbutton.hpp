@@ -194,7 +194,8 @@ class GenericButton {
    */
   void longPressTimeout();                                // timer callback to excecute a longPress event
 
-  void multiclickTimeout();                                    // Used to separate double-clicks from regular keyPress's
+  // Used to separate double-clicks from regular keyPress's
+  void multiclickTimeout();
 
 protected:
 
@@ -372,13 +373,16 @@ public:
 
 
     /**
-     * @brief configure gpio and attach interrupt monitor
+     * @brief Enable button event handling
+     * configure gpio and attach interrupt monitor
+     * 
      */
     esp_err_t enable() override;
 
     /**
-     * @brief disable gpio interrupt handling
-     * deactivates button
+     * @brief Deactivates button
+     * disables gpio interrupt handling, ignores any press
+     * 
      */
     void disable() override;
 
@@ -389,8 +393,19 @@ public:
    */
   esp_err_t setGPIO(gpio_num_t gpio, bool logicLevel, gpio_pull_mode_t pull = GPIO_PULLUP_ONLY, gpio_mode_t mode = GPIO_MODE_INPUT);
 
+  /**
+   * @brief Enable/Disable gpio debounce feature
+   * default is "enabled" in object constructor
+   * @param debounce 
+   */
   void setDebounce(bool debounce){ disable(); _debounce = debounce; enable(); };
 
+  /**
+   * @brief Get Debounce feature state (enabled/disabled)
+   * 
+   * @return true 
+   * @return false 
+   */
   bool getDebounce(){ return _debounce; };
 
 };
