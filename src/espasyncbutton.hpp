@@ -607,8 +607,8 @@ void GenericButton<EventPolicy>::_deleteTimer(ESPButton::event_t tevent){
 //-- Method to handle longKeyPresses (called by timer)----------------------------------------------------
 template<class EventPolicy>
 void GenericButton<EventPolicy>::longPressTimeout(){
-  // check if we are in proper state
-  //if (_state != btnState_t::onHold || _state != btnState_t::onLongHold) return;
+  // check if we are in proper state to switch to 'longPress'
+  if ( !(_state == btnState_t::pressed || _state == btnState_t::onLongHold ) ) return;
   _state = btnState_t::onLongHold;
   EventMsg m{ vgpio, 0};
 
