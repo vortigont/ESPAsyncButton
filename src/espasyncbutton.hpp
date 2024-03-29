@@ -200,8 +200,8 @@ protected:
 
   struct Counters
   {
-    int8_t click{0};        // click counter
-    int8_t repeat{0};       // repeat counter
+    int32_t click{0};        // click counter
+    int32_t repeat{0};       // repeat counter
   };
 
   /**
