@@ -201,8 +201,8 @@ protected:
 
   struct Counters
   {
-    int8_t click{0};        // click counter
-    int8_t repeat{0};       // repeat counter
+    int32_t click{0};        // click counter
+    int32_t repeat{0};       // repeat counter
   };
 
   /**
@@ -622,8 +622,8 @@ void GenericButton<EventPolicy>::_deleteTimer(ESPButton::event_t tevent){
 //-- Method to handle longKeyPresses (called by timer)----------------------------------------------------
 template<class EventPolicy>
 void GenericButton<EventPolicy>::longPressTimeout(){
-  // check if we are in proper state
-  //if (_state != btnState_t::onHold || _state != btnState_t::onLongHold) return;
+  // check if we are in proper state to switch to 'longPress'
+  if ( !(_state == btnState_t::pressed || _state == btnState_t::onLongHold ) ) return;
   _state = btnState_t::onLongHold;
   EventMsg m{ vgpio, 0};
 
@@ -756,7 +756,11 @@ void GPIOButton<EventPolicy>::_gpio_isr(){
         return;
     }
     // proceed with debounce polling
-    gpio_intr_disable(_gpio);                                         // disable gpio ISR while we poll for a valid press (debouncer)
+
+    // disable gpio ISR while we poll for a valid press (debouncer)
+
+    //gpio_intr_disable(_gpio);       // somehow this does not work as expected, see https://github.com/espressif/esp-idf/pull/2873, https://github.com/espressif/esp-idf/issues/2845
+    gpio_set_intr_type(_gpio, GPIO_INTR_DISABLE);
     _ctr_debounce = 0;
     if (debounceTimer_h)
       esp_timer_start_periodic(debounceTimer_h, this->timeouts.getDebounce() / IBTN_DEBOUNCE_CNT);
@@ -800,7 +804,8 @@ void GPIOButton<EventPolicy>::_debounceCheck(){
       if (_ctr_debounce == -1*IBTN_DEBOUNCE_CNT){
         this->_state = btnState_t::idle;
         esp_timer_stop(debounceTimer_h);                                      // stop debounce timer
-        gpio_intr_enable(_gpio);                                              // enable gpio interrupt
+        gpio_set_intr_type(_gpio, GPIO_INTR_ANYEDGE);
+        //gpio_intr_enable(_gpio);                                              // enable gpio interrupt
         return;
       }
 
@@ -810,7 +815,8 @@ void GPIOButton<EventPolicy>::_debounceCheck(){
       // if debounce counter reached positive threshold => confirmed press
       this->_state = btnState_t::pressed;                                     // change button state to confirmed press-down
       esp_timer_stop(debounceTimer_h);                                        // cancel debounce polling
-      gpio_intr_enable(_gpio);                                                // Begin monitoring pin again
+      gpio_set_intr_type(_gpio, GPIO_INTR_ANYEDGE);
+      //gpio_intr_enable(_gpio);                                                // Begin monitoring pin again
         //ESP_LOGD(EBTN_TAG, "okpress");
       break;
     }
@@ -830,7 +836,8 @@ void GPIOButton<EventPolicy>::_debounceCheck(){
           this->_state = btnState_t::onHold;
 
         esp_timer_stop(debounceTimer_h);                                      // stop debounce timer
-        gpio_intr_enable(_gpio);                                              // enable gpio interrupt
+        gpio_set_intr_type(_gpio, GPIO_INTR_ANYEDGE);
+        //gpio_intr_enable(_gpio);                                              // enable gpio interrupt
         return;
       }
 
@@ -846,7 +853,8 @@ void GPIOButton<EventPolicy>::_debounceCheck(){
       // stop debounce timer
       esp_timer_stop(debounceTimer_h);
       // enable interrupt for gpio
-      gpio_intr_enable(_gpio);
+      gpio_set_intr_type(_gpio, GPIO_INTR_ANYEDGE);
+      //gpio_intr_enable(_gpio);
       break;
     }
     default:;
