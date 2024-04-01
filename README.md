@@ -20,6 +20,7 @@ This project has started as a fork of [rwmingis/InterruptButton](https://github.
     -   `AutoRepeat` events while button is on hold
     -   `Click`, `MultiClick` events for any number of consecutive short clicks counting
  * policy-based class templates to easy integrate user-defined event handler policies
+ * an easy-to-use all-in-one [Async Event Button](/examples/00_AsyncEventButton) class with callbacks
 
 ## Operation states
 

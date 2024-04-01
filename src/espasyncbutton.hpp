@@ -300,6 +300,16 @@ public:
    * @return false 
    */
   bool checkEvent(ESPButton::event_t e) const { return options.test(static_cast<std::size_t>(e)); };
+
+  /**
+   * @brief disable generation of all events
+   * this function simply calls enableEvent(flase) for all possible event,
+   * use to fast clear all settings and enable only needed events afterwars
+   * If you need just temporary disable the button but keep event settings, use disable() method instead
+   * 
+   */
+  void deactivateAll();
+
 };
 
 
@@ -359,32 +369,31 @@ class GPIOButton : public GenericButton<EventPolicy> {
   void _createDebounceTimer();
 
 public:
-    /**
-     * @brief Construct a new GPIOButton object
-     * 
-     * @param pin - gpio to attach button to
-     * @param logicLevel - active LogicLevel for a button, i.e. gpio's level when button is pressed - 'false' for LOW, 'true' for HIGH
-     * @param pull - gpio pull mode configuration, see https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/gpio.html#_CPPv416gpio_pull_mode_t
-     * @param mode - gpio mode configuration, see https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/gpio.html#_CPPv411gpio_mode_t
-     */
-    GPIOButton(gpio_num_t gpio, bool logicLevel, gpio_pull_mode_t pull = GPIO_PULLUP_ONLY, gpio_mode_t mode = GPIO_MODE_INPUT, bool debounce = true);
-    // Class Destructor
-    virtual ~GPIOButton();
+  /**
+   * @brief Construct a new GPIOButton object
+   * 
+   * @param pin - gpio to attach button to
+   * @param logicLevel - active LogicLevel for a button, i.e. gpio's level when button is pressed - 'false' for LOW, 'true' for HIGH
+   * @param pull - gpio pull mode configuration, see https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/gpio.html#_CPPv416gpio_pull_mode_t
+   * @param mode - gpio mode configuration, see https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/gpio.html#_CPPv411gpio_mode_t
+   */
+  GPIOButton(gpio_num_t gpio, bool logicLevel, gpio_pull_mode_t pull = GPIO_PULLUP_ONLY, gpio_mode_t mode = GPIO_MODE_INPUT, bool debounce = true);
+  // Class Destructor
+  virtual ~GPIOButton();
 
+  /**
+   * @brief Enable button event handling
+   * configure gpio and attach interrupt monitor
+   * 
+   */
+  esp_err_t enable() override;
 
-    /**
-     * @brief Enable button event handling
-     * configure gpio and attach interrupt monitor
-     * 
-     */
-    esp_err_t enable() override;
-
-    /**
-     * @brief Deactivates button
-     * disables gpio interrupt handling, ignores any press
-     * 
-     */
-    void disable() override;
+  /**
+   * @brief Deactivates button
+   * disables gpio interrupt handling, ignores any press
+   * 
+   */
+  void disable() override;
 
   /**
    * @brief Set/change gpio
@@ -407,6 +416,85 @@ public:
    * @return false 
    */
   bool getDebounce(){ return _debounce; };
+
+};
+
+/**
+ * @brief an all-in-one GPIO button class with callbacks
+ * it's a simple wrapper that combines GPIO button, event loop handler
+ * and a set of callbacks for each event type.
+ * Use this class if you need just a simple single button solution with callbacks
+ * 
+ */
+class AsyncEventButton : public GPIOButton<ESPEventPolicy> {
+
+  // event bus handler
+  esp_event_handler_instance_t _evt_handler = nullptr;
+  // Button events receiver
+  void _evt_picker(esp_event_base_t base, int32_t id, void* data);
+
+public:
+  /**
+   * @brief Construct a new AsyncEventButton object
+   * 
+   * @param pin - gpio to attach button to
+   * @param logicLevel - active LogicLevel for a button, i.e. gpio's level when button is pressed - 'false' for LOW, 'true' for HIGH
+   * @param pull - gpio pull mode configuration, see https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/gpio.html#_CPPv416gpio_pull_mode_t
+   * @param mode - gpio mode configuration, see https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/gpio.html#_CPPv411gpio_mode_t
+   */
+  AsyncEventButton(gpio_num_t gpio, bool logicLevel, gpio_pull_mode_t pull = GPIO_PULLUP_ONLY, gpio_mode_t mode = GPIO_MODE_INPUT, bool debounce = true)
+    : GPIOButton<ESPEventPolicy>(gpio, logicLevel, pull, mode, debounce){};
+
+  // D-tor
+  ~AsyncEventButton();
+
+  // callback type for simple function
+  using callback_t = std::function< void ()>;
+  // callback type for function with counter argument
+  using callback_cnt_t = std::function< void (int32_t counter)>;
+
+  // register to event bus and activated event handling 
+  void begin();
+
+  // assign OnPress callback function
+  void onPress(callback_t f);
+
+  // assign OnRelease callback function
+  void onRelease(callback_t f);
+
+  // assign OnClick callback function
+  void onClick(callback_t f);
+
+  // assign OnLongPress callback function
+  void onLongPress(callback_t f);
+
+  // assign OnLongRelease callback function
+  void onLongRelease(callback_t f);
+
+  // assign OnAutoRepeat callback function
+  void onAutoRepeat(callback_cnt_t f);
+
+  // assign OnMultiClick callback function
+  void onMultiClick(callback_cnt_t f);
+
+  /**
+   * @brief remove all callbacks at once
+   * 
+   */
+  void onClear();
+
+private:
+  struct CallBacks {
+    callback_t press = nullptr;
+    callback_t release = nullptr;
+    callback_t click = nullptr;
+    callback_t longPress = nullptr;
+    callback_t longRelease = nullptr;
+    callback_cnt_t autoRepeat = nullptr;
+    callback_cnt_t multiCLick = nullptr;
+  };
+
+  CallBacks _cb;
 
 };
 
@@ -660,6 +748,10 @@ void GenericButton<EventPolicy>::multiclickTimeout(){
 
 template<class EventPolicy>
 void GenericButton<EventPolicy>::enableEvent(ESPButton::event_t e, bool state){
+  // check if state needs to be changed at all
+  if (options.test(static_cast<std::size_t>(e)) == state)
+    return;
+
   options.set(static_cast<std::size_t>(e), state);
 
   switch (e){
@@ -680,7 +772,18 @@ void GenericButton<EventPolicy>::enableEvent(ESPButton::event_t e, bool state){
   }
 }
 
+template<class EventPolicy>
+void GenericButton<EventPolicy>::deactivateAll(){
+  enableEvent(ESPButton::event_t::press, false);
+  enableEvent(ESPButton::event_t::release, false);
+  enableEvent(ESPButton::event_t::click, false);
+  enableEvent(ESPButton::event_t::longPress, false);
+  enableEvent(ESPButton::event_t::longRelease, false);
+  enableEvent(ESPButton::event_t::autoRepeat, false);
+  enableEvent(ESPButton::event_t::multiClick, false);
+}
 
+// === GPIOButton implementation ===
 
 // Constructor ------------------------------------------------------------------
 template<class EventPolicy>

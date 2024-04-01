@@ -92,6 +92,8 @@ void stopBtnQTask(){
 
 } // namespace ESPButton
 
+using namespace ESPButton;
+
 void ButtonCallbackMenu::assign(int32_t gpio, uint32_t menuLevel, btn_callback_t callback){
   callbacks.emplace_back(EventCallback(menuLevel, gpio, callback));
 }
@@ -132,4 +134,106 @@ void ESPEventPolicy::event(ESPButton::event_t e, EventMsg *msg){
 void TimeOuts::setDebounce( uint32_t us ){
   debounce = us < IBTN_DEBOUNCE_MIN_TIME_US ? IBTN_DEBOUNCE_MIN_TIME_US : us;
   debounce = us > IBTN_DEBOUNCE_MAX_TIME_US ? IBTN_DEBOUNCE_MAX_TIME_US : us;
+}
+
+
+// === AsyncEventButton methods ===
+// d-tor
+AsyncEventButton::~AsyncEventButton(){
+  // unsunscribe event handler
+  if (_evt_handler){
+    if (ESPButton::ebtn_hndlr)
+      esp_event_handler_instance_unregister_with(ESPButton::ebtn_hndlr, EBTN_EVENTS, ESP_EVENT_ANY_ID, _evt_handler);
+    else
+      esp_event_handler_instance_unregister(EBTN_EVENTS, ESP_EVENT_ANY_ID, _evt_handler);
+
+    _evt_handler = nullptr;
+  }
+}
+
+void AsyncEventButton::begin(){
+  if (_evt_handler) return;
+  // event bus subscription
+  if (ESPButton::ebtn_hndlr){
+    // subscribe to custom loop handler if set
+    ESP_ERROR_CHECK(esp_event_handler_instance_register_with(
+                      ESPButton::ebtn_hndlr,
+                      EBTN_EVENTS, ESP_EVENT_ANY_ID,
+                      [](void* self, esp_event_base_t base, int32_t id, void* data) { static_cast<AsyncEventButton*>(self)->_evt_picker(base, id, data); },
+                      this,
+                      &_evt_handler)
+                  );
+  } else {
+    // otherwise subscribe to default ESP event bus
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+                      EBTN_EVENTS, ESP_EVENT_ANY_ID,
+                      [](void* self, esp_event_base_t base, int32_t id, void* data) { static_cast<AsyncEventButton*>(self)->_evt_picker(base, id, data); },
+                      this,
+                      &_evt_handler)
+                  );
+  }
+
+  // disable all events by default
+  deactivateAll();
+}
+
+void AsyncEventButton::_evt_picker(esp_event_base_t base, int32_t id, void* data){
+  switch(int2event_t(id)){
+    case event_t::press :
+      if (_cb.press) _cb.press();
+      break;
+    case event_t::release :
+      if (_cb.release) _cb.release();
+      break;
+    case event_t::click :
+      if (_cb.click) _cb.click();
+      break;
+    case event_t::longPress :
+      if (_cb.longPress) _cb.longPress();
+      break;
+    case event_t::longRelease :
+      if (_cb.longRelease) _cb.longRelease();
+      break;
+    case event_t::autoRepeat :
+      if (_cb.autoRepeat) _cb.autoRepeat(reinterpret_cast<EventMsg*>(data)->cntr);
+      break;
+    case event_t::multiClick :
+      if (_cb.multiCLick) _cb.multiCLick(reinterpret_cast<EventMsg*>(data)->cntr);
+      break;
+  }
+}
+
+void AsyncEventButton::onPress(callback_t f){
+  _cb.press = f;
+  enableEvent(event_t::press, (f != nullptr));
+}
+
+void AsyncEventButton::onRelease(callback_t f){
+  _cb.release = f;
+  enableEvent(event_t::release, (f != nullptr));
+}
+
+void AsyncEventButton::onClick(callback_t f){
+  _cb.click = f;
+  enableEvent(event_t::click, (f != nullptr));
+}
+
+void AsyncEventButton::onLongPress(callback_t f){
+  _cb.longPress = f;
+  enableEvent(event_t::longPress, (f != nullptr));
+}
+
+void AsyncEventButton::onLongRelease(callback_t f){
+  _cb.longRelease = f;
+  enableEvent(event_t::longRelease, (f != nullptr));
+}
+
+void AsyncEventButton::onAutoRepeat(callback_cnt_t f){
+ _cb.autoRepeat = f;
+  enableEvent(event_t::autoRepeat, (f != nullptr));
+}
+
+void AsyncEventButton::onMultiClick(callback_cnt_t f){
+ _cb.multiCLick = f;
+  enableEvent(event_t::multiClick, (f != nullptr));
 }
