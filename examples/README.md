@@ -1,7 +1,9 @@
 ESPAsyncButton - Examples
 ======
 
-All examples are ready-to-build Platformio projects. Pls switch to example forler and run `pio run -t upload && pio device monitor`
+All examples are ready-to-build [Platformio](https://platformio.org/) projects. Pls switch to example folder and run `pio run -t upload && pio device monitor`
+Arduino IDE users should also be fine, but I have not tested it, sorry.
+
 
 [Async Event Button](/examples/00_AsyncEventButton) - An all-in-one GPIO button class with callbacks demo.
 It's a simple wrapper that combines GPIO button, event loop handler and a set of callbacks for each event type.

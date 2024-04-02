@@ -1,8 +1,8 @@
 # ESPAsyncButton
 
-__[EXAMPLES](/examples/) |__ [![PlatformIO CI](https://github.com/vortigont/ESPAsyncButton/actions/workflows/pio_build.yml/badge.svg)](https://github.com/vortigont/ESPAsyncButton/actions/workflows/pio_build.yml)
+__[EXAMPLES](/examples/) | [CHANGELOG](CHANGELOG.md) |__ [![PlatformIO CI](https://github.com/vortigont/ESPAsyncButton/actions/workflows/pio_build.yml/badge.svg)](https://github.com/vortigont/ESPAsyncButton/actions/workflows/pio_build.yml) | [![PlatformIO Registry](https://badges.registry.platformio.org/packages/vortigont/library/ESPAsyncButton.svg)](https://registry.platformio.org/libraries/vortigont/ESPAsyncButton)
 
-Event-based asynchronous button library for the ESP32 arduino/IDF
+Event-based asynchronous button library for the ESP32 Arduino/IDF
 
 
 This project has started as a fork of [rwmingis/InterruptButton](https://github.com/rwmingis/InterruptButton) - a really nice lib for ESP32 interrupt based buttons. But then I reworked it down to scratch to implement a set of classes for versatile button management for ESP32 family chips. It uses event-driven approach to register, transfer an handle button events. Utilizing RTOS features and HW timers event handling is fully asynchronous and decoupled from gpio ISRs. It allows to build flexible event-drivent derivatives for asynchronous, thread-aware projects.
@@ -61,5 +61,5 @@ Timeline events diagram:
 
 
 #### Thanks
-Thanks to [R. Mingis](https://github.com/rwmingis) for his original lib and inspiration for this project.
+Thanks to [R. Mingis](https://github.com/rwmingis) for his original [lib](https://github.com/rwmingis/InterruptButton) and inspiration for this project.
 

@@ -4,7 +4,7 @@
     "frameworks": "arduino",
     "platforms": ["espressif32"],
     "url": "https://github.com/vortigont/ESPAsyncButton",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "keywords": "input, button, event",
     "authors": [
         {
