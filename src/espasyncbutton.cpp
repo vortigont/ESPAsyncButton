@@ -159,7 +159,10 @@ void AsyncEventButton::begin(){
     ESP_ERROR_CHECK(esp_event_handler_instance_register_with(
                       ESPButton::ebtn_hndlr,
                       EBTN_EVENTS, ESP_EVENT_ANY_ID,
-                      [](void* self, esp_event_base_t base, int32_t id, void* data) { static_cast<AsyncEventButton*>(self)->_evt_picker(base, id, data); },
+                      [](void* self, esp_event_base_t base, int32_t id, void* data) {
+                          if ( reinterpret_cast<EventMsg*>(data)->gpio != static_cast<AsyncEventButton*>(self)->getGPIO() ) return;
+                          static_cast<AsyncEventButton*>(self)->_evt_picker(base, id, data);
+                      },
                       this,
                       &_evt_handler)
                   );
@@ -167,7 +170,10 @@ void AsyncEventButton::begin(){
     // otherwise subscribe to default ESP event bus
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
                       EBTN_EVENTS, ESP_EVENT_ANY_ID,
-                      [](void* self, esp_event_base_t base, int32_t id, void* data) { static_cast<AsyncEventButton*>(self)->_evt_picker(base, id, data); },
+                      [](void* self, esp_event_base_t base, int32_t id, void* data) {
+                          if ( reinterpret_cast<EventMsg*>(data)->gpio != static_cast<AsyncEventButton*>(self)->getGPIO() ) return;
+                          static_cast<AsyncEventButton*>(self)->_evt_picker(base, id, data);
+                      },
                       this,
                       &_evt_handler)
                   );
