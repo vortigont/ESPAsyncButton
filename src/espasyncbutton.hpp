@@ -42,7 +42,7 @@ namespace ESPButton {
   // Events that button generate on operation
   enum class event_t {
     press = 0,              // button was just pressed, it is not yet know how long it will reside in that "pressed" state
-    release,                // button was just released after shot press
+    release,                // button was just released after short press
     click,                  // short press+release event that completes faster then longPress time, i.e. a "mouse click"
     longPress,              // button was pressed and was held in a pressed state long enough that it can't be treaded as 'click'
     longRelease,            // button was releases after being long-pressed for quite some time
@@ -122,16 +122,16 @@ namespace ESPButton {
     releasedLong              // key has just been released and debounced from a long-hold (generates and event )
   };
 
-  /**
-   * @brief Button event message structure
-   * holds information about event for a specific button instance
-   */
-  struct EventMsg {
-    // gpio that produced and event, could be real gpio or virtual 
-    int32_t gpio;
-    // counter for an event, optional filed, i.e. could be a number of multiclicks, etc
-    int32_t cntr;
-  };
+/**
+ * @brief Button event message structure
+ * holds information about event for a specific button instance
+ */
+struct EventMsg {
+  // gpio that produced and event, could be real gpio or virtual 
+  int32_t gpio;
+  // counter for an event, optional filed, i.e. could be a number of multiclicks, etc
+  int32_t cntr;
+};
 
 
 using btn_callback_t = std::function< void (ESPButton::event_t event, const EventMsg* msg)>;
@@ -571,6 +571,7 @@ public:
   void handleEvent(ESPButton::event_t event, const EventMsg* m);
 };
 
+
 // Templates implementations ----------------------------------------------------
 
 // === GenericButton implementation ===
@@ -817,24 +818,34 @@ esp_err_t GPIOButton<EventPolicy>::enable(){
 
   gpio_config_t gpio_conf = {};
   gpio_conf.mode = _gpioMode;
+  gpio_conf.pull_up_en = (_gpioPull == GPIO_PULLUP_ONLY || _gpioPull == GPIO_PULLUP_PULLDOWN) ?  GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
+  gpio_conf.pull_down_en = (_gpioPull == GPIO_PULLDOWN_ONLY || _gpioPull == GPIO_PULLUP_PULLDOWN) ? GPIO_PULLDOWN_ENABLE : GPIO_PULLDOWN_DISABLE;
   gpio_conf.pin_bit_mask = BIT64(_gpio);
-  gpio_conf.intr_type = GPIO_INTR_ANYEDGE;
+  gpio_conf.intr_type = GPIO_INTR_DISABLE;
   err = gpio_config(&gpio_conf);
   if (err != ESP_OK)
     return err;
 
-  gpio_set_pull_mode(_gpio, _gpioPull);
+  //gpio_set_pull_mode(_gpio, _gpioPull);
 
-  this->_state = (gpio_get_level(_gpio) == _gpio_ll) ? btnState_t::onHold : btnState_t::idle;    // Set to gpio's level state when initialising
-
-  err = gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);              // it' OK to call this function multiple times
+  err = gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);                // it' OK to call this function multiple times
   ESP_LOGD(EBTN_TAG, "GPIO ISR service installed with exit status: %d", err);
 
-  _ctr_debounce = this->ctr.click = this->ctr.repeat = 0;             // clear counters
+  _ctr_debounce = this->ctr.click = this->ctr.repeat = 0;               // clear counters
 
   gpio_isr_handler_add(_gpio, GPIOButton::isr_handler, static_cast<void*>(this));
 
-  if (_debounce) _createDebounceTimer();                                      // preallocate debounce timer
+  this->_state = (gpio_get_level(_gpio) == _gpio_ll) ? btnState_t::onHold : btnState_t::idle;    // Set to gpio's level state when initialising
+
+  // identify interrupt level we will wait for, depending on initialisation state of a button
+  gpio_int_type_t int_type;
+  if (this->_state == btnState_t::idle)
+    int_type = _gpio_ll ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL;
+  else
+    int_type = _gpio_ll ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL;
+
+  gpio_set_intr_type(_gpio, int_type);
+  if (_debounce) _createDebounceTimer();                                // preallocate debounce timer
 
   return err;
 }
@@ -907,7 +918,7 @@ void GPIOButton<EventPolicy>::_debounceCheck(){
       if (_ctr_debounce == -1*IBTN_DEBOUNCE_CNT){
         this->_state = btnState_t::idle;
         esp_timer_stop(debounceTimer_h);                                      // stop debounce timer
-        gpio_set_intr_type(_gpio, GPIO_INTR_ANYEDGE);
+        gpio_set_intr_type(_gpio, _gpio_ll ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
         //gpio_intr_enable(_gpio);                                              // enable gpio interrupt
         return;
       }
@@ -915,12 +926,17 @@ void GPIOButton<EventPolicy>::_debounceCheck(){
       if (_ctr_debounce < IBTN_DEBOUNCE_CNT)
         return;                                                               // keep debouncing
 
-      // if debounce counter reached positive threshold => confirmed press
-      this->_state = btnState_t::pressed;                                     // change button state to confirmed press-down
+      // if debounce counter reached positive threshold, revalidate gpio level and confirm/reject switching to 'pressed' state
       esp_timer_stop(debounceTimer_h);                                        // cancel debounce polling
-      gpio_set_intr_type(_gpio, GPIO_INTR_ANYEDGE);
+      if (gpio_get_level(_gpio) == _gpio_ll){
+        this->_state = btnState_t::pressed;                                   // change button state to confirmed 'pressed'
+        gpio_set_intr_type(_gpio, _gpio_ll ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
+      } else {
+        this->_state = btnState_t::idle;                                      // reject press and return to idle state
+        gpio_set_intr_type(_gpio, _gpio_ll ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
+      }
+
       //gpio_intr_enable(_gpio);                                                // Begin monitoring pin again
-        //ESP_LOGD(EBTN_TAG, "okpress");
       break;
     }
 
@@ -939,7 +955,7 @@ void GPIOButton<EventPolicy>::_debounceCheck(){
           this->_state = btnState_t::onHold;
 
         esp_timer_stop(debounceTimer_h);                                      // stop debounce timer
-        gpio_set_intr_type(_gpio, GPIO_INTR_ANYEDGE);
+        gpio_set_intr_type(_gpio, _gpio_ll ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
         //gpio_intr_enable(_gpio);                                              // enable gpio interrupt
         return;
       }
@@ -948,15 +964,18 @@ void GPIOButton<EventPolicy>::_debounceCheck(){
       if (_ctr_debounce < IBTN_DEBOUNCE_CNT)                                   // keep debouncing or monitor for gpio interrupt
         return;
 
-      if (this->_state == btnState_t::releaseLongDebounce)
-        this->_state = btnState_t::releasedLong;
-      else
-        this->_state = btnState_t::released;                                 // change button state to confirmed keyrelease
+      // ** key released **
 
       // stop debounce timer
       esp_timer_stop(debounceTimer_h);
+
+      if (this->_state == btnState_t::releaseLongDebounce)
+        this->_state = btnState_t::releasedLong;
+      else
+        this->_state = btnState_t::released;                                 // change button state to confirmed key-release
+
       // enable interrupt for gpio
-      gpio_set_intr_type(_gpio, GPIO_INTR_ANYEDGE);
+      gpio_set_intr_type(_gpio, _gpio_ll ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
       //gpio_intr_enable(_gpio);
       break;
     }
