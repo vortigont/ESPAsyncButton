@@ -32,7 +32,10 @@
 #endif
 
 
+// AsyncButton events
 ESP_EVENT_DECLARE_BASE(EBTN_EVENTS);
+// Encoder events
+ESP_EVENT_DECLARE_BASE(EBTN_ENC_EVENTS);
 
 static const char* EBTN_TAG = "EBTN";           // IDF log tag
 
@@ -48,6 +51,11 @@ namespace ESPButton {
     longRelease,            // button was releases after being long-pressed for quite some time
     autoRepeat,             // button is being held down longer than longPress interval, autorepeat events are generated periodically while button is in long-pressed state
     multiClick,             // button has been clicked many times consecutevily (a number of clicks is also reported within the event)
+    // Encoder events
+    encCount,               // Encoder counter, reports counter value for encoder as int32_t
+    encRollOverMin,         // Encoder counter rollover from >Max to Min
+    encRollOverMax,         // Encoder counter rollover from >Min to Max
+    // END
     undefined               // unknown/undefined event
   };
 
@@ -570,6 +578,134 @@ public:
    */
   void handleEvent(ESPButton::event_t event, const EventMsg* m);
 };
+
+/**
+ * @brief Rotary encoder emulated with two push buttons
+ * this object will generate encoder counter events ESPButton::event_t::encCount
+ * it is controlled with two buttons - 'decrementer', 'incrementer'
+ * It supports:
+ *  - auto-repeat on press and hold
+ *  - variable steps count per press
+ *  - initial conditions, min/max constrains
+ *  - counter rollover on min/max boundaries
+ *  - multiplicative steps on button multiclicks
+ * 
+ */
+class PseudoRotaryEncoder {
+  // Roto encoder configuration
+  struct RotoCounter {
+    // current encoder count value
+    int32_t value{0};
+    // increment / decrement step
+    int32_t step{1};
+    // increment / decrement multiplier factor
+    int32_t mfactor{1};
+    // minimum / maximum counter values, takes in effect when 'constrained' = true
+    int32_t min, max;
+    // enable min / max constrain
+    bool constrain{false};
+    // jump between min/max when couner reaches constrained bounds
+    bool rollover{false};
+  };
+
+public:
+  // c-tor
+  PseudoRotaryEncoder(gpio_num_t gpio_decr, gpio_num_t gpio_inc, bool logicLevel, gpio_pull_mode_t pull = GPIO_PULLUP_ONLY, gpio_mode_t mode = GPIO_MODE_INPUT, bool debounce = true );
+  // virtual d-tor
+  virtual ~PseudoRotaryEncoder();
+
+  /**
+   * @brief initialize buttons and set event handler
+   * 
+   */
+  void begin();
+
+  /**
+   * @brief Set Rotary Counter values
+   * 
+   * @param value - new counter value
+   * @param step - new step, if step is not zero. If step is negative, than incr/decr buttons are reversed
+   * @param min - new min value, if (min == max) then min value is not changed
+   * @param max - new max value, if (min == max) then max value is not changed
+   * @note if (min < max) then bounds constrain will be enforced on counter
+   */
+  void setCounter(int32_t value, int32_t step = 0, int32_t min = 0, int32_t max = 0);
+
+  /**
+   * @brief Set Multiply Factor
+   * if M-Factor is >1 then counter increment will be multiplied by m-factor on multicliks.
+   * I.e. if base increment is '1' and m-factor is '2', then double-clicks will increment the counter
+   * by 1(increment) * 2(clicks) * 2(m-factor) = 4
+   * 
+   * @param mfactor 
+   */
+  void setMultiplyFactor(int32_t mfactor);
+
+  /**
+   * @brief enforce constrain to roto counter value
+   * 
+   * @param constrain 
+   */
+  void setConstrain(bool constrain);
+
+  /**
+   * @brief Enable conter Rollover
+   * if enabled then when counter reaches min value it goes to maximum with a next decrement
+   * respectively when conter reaches max value it goes to minimum with a next increment
+   * 
+   * @param rollover 
+   */
+  void setRollover(bool rollover){ _rc.rollover = rollover; };
+
+  /**
+   * @brief reset encoder
+   * set counter value to '0'
+   * step to '1'
+   * disable constrain and rollover
+   * 
+   */
+  void reset(){ _rc = RotoCounter(); setMultiplyFactor(1); };
+
+  /**
+   * @brief Get RotoCounter structure
+   * 
+   * @return const RotoCounter 
+   */
+  const RotoCounter& getConter() const { return _rc; }
+
+  /**
+   * @brief access to underlying GPIOButton.TimeOuts object for decrement button
+   * 
+   * @return TimeOuts& 
+   */
+  TimeOuts& timeoutsDecr(){ return _decr.timeouts; }
+
+  /**
+   * @brief access to underlying GPIOButton.TimeOuts object for increment button
+   * 
+   * @return TimeOuts& 
+   */
+  TimeOuts& timeoutsIncr(){ return _incr.timeouts; }
+
+
+private:
+  // button gpio's
+  GPIOButton<ESPEventPolicy> _decr, _incr;
+
+  // rotary counter configuration
+  RotoCounter _rc;
+
+  // event bus handler
+  esp_event_handler_instance_t _evt_handler = nullptr;
+  // Button events receiver
+  void _evt_picker(esp_event_base_t base, int32_t id, void* data);
+
+  // counter
+  void _updCnt(int32_t increment, int32_t gpio);
+};
+
+
+
 
 
 // Templates implementations ----------------------------------------------------
