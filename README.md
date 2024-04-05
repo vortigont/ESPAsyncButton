@@ -16,11 +16,17 @@ This project has started as a fork of [rwmingis/InterruptButton](https://github.
  * button event propagation and handling via [ESP Event loop](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/esp_event.html)
  * selectable button behavior
     - defaults are generating `press`/`release` events
-    - `longPress`, `longRelease` events could be enabled on button hold
-    -   `AutoRepeat` events while button is on hold
-    -   `Click`, `MultiClick` events for any number of consecutive short clicks counting
+    - `longPress`, `longRelease` events on button hold
+    -  `AutoRepeat` events while button is kept on hold
+    -  `Click`, `MultiClick` events for any number of consecutive short clicks counting
  * policy-based class templates to easy integrate user-defined event handler policies
  * an easy-to-use all-in-one [Async Event Button](/examples/00_AsyncEventButton) class with callbacks
+ * [Pseudo Rotary encoder](/examples/03_PseudoEncoder) - a counting encoder made of two push-buttons, a handy object to work with scrolling menus, controls, etc...
+   - auto-repeat on press and hold
+   - variable steps count per press
+   - initial conditions, min/max constrains
+   - counter rollover on min/max boundaries
+   - multiplicative steps on button multiclicks
 
 ## Operation states
 
