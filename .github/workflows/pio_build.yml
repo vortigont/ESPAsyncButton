@@ -35,6 +35,7 @@ jobs:
           - "examples/00_AsyncEventButton"
           - "examples/01_BasicEvents"
           - "examples/02_CallbackMenu"
+          - "examples/03_PseudoEncoder"
 
     steps:
       - uses: actions/checkout@v4
