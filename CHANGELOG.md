@@ -1,5 +1,12 @@
 # Change Log
 
+## release v1.2.0
+_new features:_
+  Rotary encoder emulated with two push buttons
+_bugfixes:_
+  rework gpio's interrupts configuration. Using percise interrupt configuration for gpio level instead of edge cross.
+    This way it works more reliable for noisy buttons and makes button state transition error-prone.
+
 ## release v1.1.0
 _new features:_
   Implement AsyncEventButton class

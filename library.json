@@ -1,10 +1,10 @@
 {
     "name": "ESPAsyncButton",
-    "description": "Event-driven asynchronous button toolkit for ESP32",
+    "description": "Event-driven asynchronous button toolkit for ESP32. Button control with patterns - short/long press, clicks, autorepeat, multiple-clicks. Non-blocking asynchronous architecture with queues and multi-leveled callbacks. Pseudo-encoder, multi-button actions, etc...",
     "frameworks": "arduino",
     "platforms": ["espressif32"],
     "url": "https://github.com/vortigont/ESPAsyncButton",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "keywords": "input, button, event",
     "authors": [
         {

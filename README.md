@@ -12,12 +12,13 @@ This project has started as a fork of [rwmingis/InterruptButton](https://github.
  * GPIO-based momentary buttons with/without debouncing
  * Interrupts + HW timers are used to register button press/release and generate events
  * gpio's ISRs and event processing are _decoupled_ from each other, i.e. it is possible to handle multiple gpios from a single callback-handler
+ * this library does NOT have any Arduino `loop()` hooks for polling or updating button states, calculating timers, etc... 
  * this library does NOT call any user callback code in ISRs, event processing are handled in separate RTOS thread depending on Policy
  * button event propagation and handling via [ESP Event loop](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/esp_event.html)
  * selectable button behavior
     - defaults are generating `press`/`release` events
     - `longPress`, `longRelease` events on button hold
-    -  `AutoRepeat` events while button is kept on hold
+    -  `AutoRepeat` events with counter while button is kept on hold
     -  `Click`, `MultiClick` events for any number of consecutive short clicks counting
  * policy-based class templates to easy integrate user-defined event handler policies
  * an easy-to-use all-in-one [Async Event Button](/examples/00_AsyncEventButton) class with callbacks
