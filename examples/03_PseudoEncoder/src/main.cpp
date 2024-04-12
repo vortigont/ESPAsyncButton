@@ -39,16 +39,6 @@ AsyncEventButton b1(BUTTON_ACTION, LOW);
  */
 void encoder_events(void* handler_args, esp_event_base_t base, int32_t id, void* event_data);
 
-/**
- * @brief function declaration that will subsribe to Action button events
- * 
- * @param handler_args - not used in this example, NULL here
- * @param base - EBTN_EVENTS identifier
- * @param id - event id
- * @param event_data - supplied data pointer via void*
- */
-void action_button(void* handler_args, esp_event_base_t base, int32_t id, void* event_data);
-
 // in this function I will assign various callbacks for action button
 void setup_action_button();
 
@@ -99,7 +89,7 @@ void setup_action_button(){
         Serial.println(" - Double-click will set a constrained encoder that could count only from -10 to 10 with step 2");
         Serial.println(" - Triple-click will set a constrained encoder that could count only from 0 to 20 with step 1 and will rollover on min and max values");
         Serial.println(" - Quad-click will reset the encoder and set multiplier factor to 2");
-        Serial.println("       you can try single, double, triple or n-times clicks and see how cont step is progressing");
+        Serial.println("       you can try single, double, triple or n-times clicks and see how count step is progressing");
         Serial.println();
      });
 

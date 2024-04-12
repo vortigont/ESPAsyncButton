@@ -35,15 +35,6 @@ GPIOButton<ESPEventPolicy> b1(BUTTON_1, LOW);
  */
 GPIOButton<ESPEventPolicy> b2(BUTTON_2, LOW);
 
-/*
-    We can also configure various button/gpio timeouts on how fast/slow Button
-    reacts to click/multiclick evets, etc..
-
-    b1.timeouts.setDebounce(t)  -   debounce    time in microseconds, default is 5000
-    b1.timeouts.setLongPress(t) -   LongPress   timeout in milliseconds, how long you need to hold the button for it to trigger LongPress event
-    b1.timeouts.setAutoRepeat   -   AutoRepeat  timeout in milliseconds, how fast the button will generate 'autorepeat' events when held down
-    b1.timeouts.setMultiClick   -   MultiClick  timeout in milliseconds, how long Button will wait for consecutive clicks before triggering MultiClick event
-*/
 
 /**
  * @brief Button callback menu object
@@ -61,7 +52,7 @@ void cursor_control(event_t e, const EventMsg* m);
 void volume_control(event_t e, const EventMsg* m);
 // an example function, it will just show click counts
 void counters(event_t e, const EventMsg* m);
-// this function will toggle menu levels based on special button evetns
+// this function will toggle menu levels based on special button events
 void menu_toggle();
 
 
@@ -74,12 +65,13 @@ void setup(){
 
     // attach our Menu callback handler to system event loop to listen for button events
     ESP_ERROR_CHECK(esp_event_handler_instance_register(EBTN_EVENTS,
-                                                        ESP_EVENT_ANY_ID,
-                                                        // this lambda will simply translate loop events into btn_callback_t callback function
-                                                        [](void* handler_args, esp_event_base_t base, int32_t id, void* event_data){
-                                                            menu.handleEvent(ESPButton::int2event_t(id), reinterpret_cast<EventMsg*>(event_data));
-                                                        }, 
-                                                        NULL, NULL) );
+                            ESP_EVENT_ANY_ID,
+                            // this lambda will simply translate loop events into btn_callback_t callback function
+                            [](void* handler_args, esp_event_base_t base, int32_t id, void* event_data){
+                                menu.handleEvent(ESPButton::int2event_t(id), reinterpret_cast<EventMsg*>(event_data));
+                            }, 
+                            NULL, NULL)
+                );
 
     // disable simple press/release events, we do not need them
     b1.enableEvent(event_t::press,      false);
@@ -117,7 +109,12 @@ void setup(){
     b2.enable();
 
     // print a hint
-    Serial.print("Use LongPress to toggle menu levels, single press to do action");
+    Serial.print("===");
+    Serial.print("Use LongPress to switch menu levels, single press to do actions");
+    Serial.print("At menu level 1 buttons will control cursor");
+    Serial.print("At menu level 2 buttons will control sound volume");
+    Serial.print("At menu level 3 buttons will just print chars on autorepeat on hold");
+    Serial.print("===");
 }
 
 void loop(){
@@ -128,7 +125,7 @@ void loop(){
 
 // this function will toggle menu-level on any button longPress
 void menu_toggle(){
-    // cycle switch menu leveles 0->1->2->0 ...
+    // cycle switch menu levels 0->1->2->0 ...
     menu.setMenuLevel( (menu.getMenuLevel()+1)%3 );
 
     // on menu level 2 we will enable autorepeat for  button_1 and multiclick counter for button_2
@@ -185,24 +182,33 @@ void counters(event_t e, const EventMsg* m){
         break;
     // autorepeat action
     case event_t::autoRepeat :
-        // just print "*" on each autorepeat event
-        Serial.print("*");
+        // I'll print "*" on each autorepeat event for button_1 and '#' for button_2
+        if (m->gpio == BUTTON_1)
+            Serial.print("*");
+        else
+            Serial.print("#");
         break;
     // multiclicks
     case event_t::multiClick :
         Serial.printf("gpio: %d clicked %u times. ", m->gpio, m->cntr);
+        Serial.println("Click 4 times to enable autorepeat for Button 2");
         Serial.println("Click 5 times to exit to menu level 0");
         // toggle menu on 5th click
+        if (m->cntr == 4){
+            b2.enableEvent(event_t::autoRepeat);
+            Serial.println("Button 2 autorepeats enabled, try it");
+        }
+
         if (m->cntr == 5)
             menu_toggle();
         break;
     }
 
     /**
-     * since we are using autorepeat above for astesk printing, we can no longer use 'longPress' event to toggle menu, because 'autorepeat' is triggered after 'longPress' event
-       so, let's disable it
+     * since we are using autorepeat above for astesk printing, we can no longer use 'longPress' event to toggle menu,
+     * because 'autorepeat' is triggered after 'longPress' event
+       so, let's ignore it here
     */
-
     //case event_t::longPress :
     //    menu_toggle();
     //    break;

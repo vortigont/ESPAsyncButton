@@ -16,7 +16,7 @@
  * @brief AsyncEventButton object construtor has the following parameters
  * 
  * @param gpio - GPIO number
- * @param logicLevel - Logic level state of the gpio when button is in 'PRESSED' state, LOW or HIGHT
+ * @param logicLevel - Logic level state of the gpio when button is in 'PRESSED' state, LOW or HIGH
  * @param pull - GPIO pull mode as defined in   https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv416gpio_pull_mode_t
  * @param mode - GPIO mode as defined in        https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv411gpio_mode_t
  * @param debounce = enable/disable debounce feature for gpio
@@ -25,7 +25,7 @@
  */
 
 /**
- * @brief A simple gpio mapped button with Logic level LOW, i.e. button shorts gpio to the ground, gpio must be pulled high
+ * @brief A simple gpio mapped button with Logic level LOW, i.e. button shorts gpio to the ground, gpio will be pulled high via internal pull-up resistor
  */
 AsyncEventButton b1(BUTTON_1, LOW);
 
@@ -42,7 +42,7 @@ void on_release(){
 
 // Multiple clicks callback
 void on_multiclick(int32_t counter){
-    Serial.printf("You clicked %d times!\n", counter);
+    Serial.printf("You clicked %d times!\n", counter);  // call-back parameter 'counter' contains number of cosecutive clicks
     Serial.println("You can try triple-click to enable auto-repeat on this button, or 5 times click to disable auto-repeat");
 
     // On triple-click we enable auto-repeat action callback 
@@ -50,11 +50,17 @@ void on_multiclick(int32_t counter){
         // lets enable auto-repeat for this button
         Serial.println("Auto-repeat on Long-Press enabled");
         Serial.println("If you keep auto-repeat up to 15 times, button will disable MultipleClick actions");
-        // we use lambda function as a callback
+        // we can use lambda function as a callback
         b1.onAutoRepeat(
+            // labda should accept an int32_t parameter as a number of autorepeats
             [](int32_t counter){
                 Serial.printf("auto-repeat %d times\n", counter);
-                if(counter == 15) { b1.onMultiClick(nullptr); Serial.print("Multiple click actions disabled, use LongPress to enable it again"); };
+                // let's compare number of autorepeats and on 15 we will disable MultiClicks
+                if(counter == 15) {
+                    // assigning nullptr will disable specified event and callback
+                    b1.onMultiClick(nullptr);
+                    Serial.print("Multiple click actions disabled, use LongPress to enable it again");
+                };
             }
         );
     } else if (counter == 5){
@@ -67,7 +73,8 @@ void on_multiclick(int32_t counter){
 
 // long button press
 void on_LongPress(){
-    Serial.println("Long press action! Now you can try double, triple, or any number of consecutive clicks...");
+    Serial.println("Long press action!");
+    Serial.println("Enabling 'MultiClick' events. Now you can try double, triple, or any number of consecutive clicks...");
     // enable MultiClicks
     b1.onMultiClick(on_multiclick);
     // and let's disable "press", "release" actions to reduce number of printed text
@@ -81,17 +88,17 @@ void on_LongPress(){
 
 void setup(){
     Serial.begin(115200);
-    // We MUST create default ESPevent loop unless WiFi or Bluetooth is used
+    // We MUST create default ESP Event loop unless WiFi or Bluetooth is used
     // you do not need to call this if your sketch includes any WiFi/BT setup functions
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     // activate event processing for button
-    // NOTE: Button is stil in 'disabled' state, you need to 'enable' it to start handling GPIO interrupts
+    // NOTE: Button is still in 'disabled' state, you need to 'enable' it to start handling GPIO interrupts
     b1.begin();
 
 /*
     We can also configure various button/gpio timeouts on how fast/slow Button
-    reacts to click/multiclick evets, etc..
+    reacts to click/multiclick events, etc..
 
     b1.timeouts.setDebounce(t)  -   debounce    time in microseconds, default is 5000
     b1.timeouts.setLongPress(t) -   LongPress   timeout in milliseconds, how long you need to hold the button for it to trigger LongPress event
@@ -121,7 +128,7 @@ void setup(){
     // let's pause for 2 seconds to let serial-monitor attach to the outpus after flash/reboot 
     delay(2000);
 
-    // Print some help message
+    // Print help message
     Serial.println("\n\nAsyncEventButton enabled, pls try 'press', 'release' and 'click' actions.");
     Serial.println("Multiple clicks and autorepeats are currently disabled");
     Serial.println("To activate MultiClicks use 'LongPress' action");

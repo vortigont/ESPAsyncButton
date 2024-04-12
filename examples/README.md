@@ -16,7 +16,7 @@ Build, run and watch serial monitor for event messages. Try to do different type
 [CallBack Menu](/examples/02_Callbackmenu) - An example that demonstrates how to create a multi-leveled button Menu where on each level buttons could call different callback functions, change their behavior, etc...
 Build, run and watch serial monitor for help messages.
 
-[Pseudo Rotary encoder](/examples/03_PseudoEncoder) - An example of counting encoder made of two push-buttons - incrementer and decrementer. Encoder maintains it's internal counter that is increased/decreased on every putton push.
+[Pseudo Rotary encoder](/examples/03_PseudoEncoder) - An example of counting encoder made of two push-buttons - incrementer and decrementer. Encoder maintains it's internal counter that is increased/decreased on every button click.
 It will generate encoder counter events ESPButton::event_t::encCount
 It supports:
  - auto-repeat on press and hold
