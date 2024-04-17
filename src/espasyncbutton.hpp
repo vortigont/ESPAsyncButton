@@ -671,7 +671,7 @@ public:
    * 
    * @return const RotoCounter 
    */
-  const RotoCounter& getConter() const { return _rc; }
+  const RotoCounter& getCounter() const { return _rc; }
 
   /**
    * @brief access to underlying GPIOButton.TimeOuts object for decrement button
@@ -686,6 +686,20 @@ public:
    * @return TimeOuts& 
    */
   TimeOuts& timeoutsIncr(){ return _incr.timeouts; }
+
+  /**
+   * @brief disable button handling
+   * stops event generation
+   * 
+   */
+  void disable();
+
+  /**
+   * @brief enable button handling
+   * resume event generation
+   * 
+   */
+  void enable();
 
 
 private:

@@ -389,3 +389,14 @@ void PseudoRotaryEncoder::setConstrain(bool constrain){
   else
     _rc.constrain = false;
 };
+
+void PseudoRotaryEncoder::disable(){
+  _decr.disable();
+  _incr.disable();
+}
+
+void PseudoRotaryEncoder::enable(){
+  _decr.enable();
+  _incr.enable();
+}
+
