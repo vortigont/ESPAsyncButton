@@ -811,7 +811,7 @@ void GenericButton<EventPolicy>::_createTimer(ESPButton::event_t tevent){
 
   switch (tevent)  {
     case ESPButton::event_t::multiClick :
-      if (!_mccnt){
+      if (!_mccnt && !multiclickTimer_h){
         tmrConfig.callback = [](void* self) { static_cast<GenericButton<EventPolicy>*>(self)->multiclickTimeout(); };
         ESP_ERROR_CHECK(esp_timer_create(&tmrConfig, &multiclickTimer_h));
       }
@@ -819,7 +819,7 @@ void GenericButton<EventPolicy>::_createTimer(ESPButton::event_t tevent){
       break;
 
     case ESPButton::event_t::longPress :
-      if (!_lpcnt){
+      if (!_lpcnt && !longPressTimer_h){
         tmrConfig.callback = [](void* self) { static_cast<GenericButton<EventPolicy>*>(self)->longPressTimeout(); };
         ESP_ERROR_CHECK(esp_timer_create(&tmrConfig, &longPressTimer_h));
       }
@@ -840,6 +840,7 @@ void GenericButton<EventPolicy>::_deleteTimer(ESPButton::event_t tevent){
         if (!_mccnt){
           esp_timer_stop(multiclickTimer_h);
           esp_timer_delete(multiclickTimer_h);
+          multiclickTimer_h = nullptr;
         }
       }
       break;
@@ -850,6 +851,7 @@ void GenericButton<EventPolicy>::_deleteTimer(ESPButton::event_t tevent){
         if (!_lpcnt){
           esp_timer_stop(longPressTimer_h);
           esp_timer_delete(longPressTimer_h);
+          longPressTimer_h = nullptr;
         }
       }
       break;
