@@ -180,9 +180,7 @@ class GenericButton {
   // timer for counting consecutive clicks
   esp_timer_handle_t multiclickTimer_h = nullptr;
   // long-press timer instance count
-  uint32_t _lpcnt{0};
-  // multiclick timer instance count
-  uint32_t _mccnt{0};
+  std::bitset<8> _lpcnt{0};
 
   /**
    * @brief helper method to create esp HPET timer
@@ -811,19 +809,21 @@ void GenericButton<EventPolicy>::_createTimer(ESPButton::event_t tevent){
 
   switch (tevent)  {
     case ESPButton::event_t::multiClick :
-      if (!_mccnt && !multiclickTimer_h){
+      if (!multiclickTimer_h){
         tmrConfig.callback = [](void* self) { static_cast<GenericButton<EventPolicy>*>(self)->multiclickTimeout(); };
         ESP_ERROR_CHECK(esp_timer_create(&tmrConfig, &multiclickTimer_h));
       }
-      ++_mccnt;
       break;
 
     case ESPButton::event_t::longPress :
-      if (!_lpcnt && !longPressTimer_h){
+    case ESPButton::event_t::longRelease :
+    case ESPButton::event_t::autoRepeat :
+      if (!longPressTimer_h){
         tmrConfig.callback = [](void* self) { static_cast<GenericButton<EventPolicy>*>(self)->longPressTimeout(); };
         ESP_ERROR_CHECK(esp_timer_create(&tmrConfig, &longPressTimer_h));
       }
-      ++_lpcnt;
+      // set bit for specific event type to mark longpress timer is being used
+      _lpcnt[static_cast<size_t>(tevent)] = true;
       break;
 
     default:;
@@ -835,24 +835,21 @@ template<class EventPolicy>
 void GenericButton<EventPolicy>::_deleteTimer(ESPButton::event_t tevent){
   switch (tevent)  {
     case ESPButton::event_t::multiClick :
-      if (_mccnt){
-        --_mccnt;
-        if (!_mccnt){
-          esp_timer_stop(multiclickTimer_h);
-          esp_timer_delete(multiclickTimer_h);
-          multiclickTimer_h = nullptr;
-        }
+      if (multiclickTimer_h){
+        esp_timer_stop(multiclickTimer_h);
+        esp_timer_delete(multiclickTimer_h);
+        multiclickTimer_h = nullptr;
       }
       break;
 
     case ESPButton::event_t::longPress :
-      if (_lpcnt){
-        --_lpcnt;
-        if (!_lpcnt){
+    case ESPButton::event_t::longRelease :
+    case ESPButton::event_t::autoRepeat :
+      _lpcnt[static_cast<size_t>(tevent)] = false;
+      if (_lpcnt.none()){
           esp_timer_stop(longPressTimer_h);
           esp_timer_delete(longPressTimer_h);
           longPressTimer_h = nullptr;
-        }
       }
       break;
 
@@ -909,12 +906,22 @@ void GenericButton<EventPolicy>::enableEvent(ESPButton::event_t e, bool state){
 
   switch (e){
     case ESPButton::event_t::longPress :
-    case ESPButton::event_t::longRelease :
-    case ESPButton::event_t::autoRepeat :
       if (state)
         _createTimer(ESPButton::event_t::longPress);
       else
         _deleteTimer(ESPButton::event_t::longPress);
+      break;
+    case ESPButton::event_t::longRelease :
+      if (state)
+        _createTimer(ESPButton::event_t::longRelease);
+      else
+        _deleteTimer(ESPButton::event_t::longRelease);
+      break;
+    case ESPButton::event_t::autoRepeat :
+      if (state)
+        _createTimer(ESPButton::event_t::autoRepeat);
+      else
+        _deleteTimer(ESPButton::event_t::autoRepeat);
       break;
     case ESPButton::event_t::multiClick :
       if (state)
