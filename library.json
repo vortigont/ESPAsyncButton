@@ -21,7 +21,7 @@
     "license": "LGPL-2.1-or-later",
     "repository": {
         "type": "git",
-         "url": "https://github.com/rwmingis/ESPAsyncButton.git"
+         "url": "https://github.com/vortigont/ESPAsyncButton.git"
     },
     "export": {
         "include":
