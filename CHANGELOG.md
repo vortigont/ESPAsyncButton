@@ -1,5 +1,13 @@
 # Change Log
 
+## release v1.2.1
+_new features:_
+  add PseudoRotaryEncoder::enable, PseudoRotaryEncoder::disable calls
+_bugfixes:_
+  fix bug with deleting longPressTimer
+_other_
+  use bitset for _lpcnt
+
 ## release v1.2.0
 _new features:_
   Rotary encoder emulated with two push buttons
