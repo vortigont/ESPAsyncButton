@@ -929,6 +929,7 @@ void GenericButton<EventPolicy>::enableEvent(ESPButton::event_t e, bool state){
       else
         _deleteTimer(ESPButton::event_t::multiClick);
       break;
+    default:;
   }
 }
 

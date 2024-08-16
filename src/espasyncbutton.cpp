@@ -338,6 +338,7 @@ void PseudoRotaryEncoder::_evt_picker(esp_event_base_t base, int32_t id, void* d
       // m-factor will apply amplification to increment based on number of multiclicks
       _updCnt(increment * reinterpret_cast<EventMsg*>(data)->cntr * _rc.mfactor, reinterpret_cast<EventMsg*>(data)->gpio);
       break;
+    default:;
   }
 }
 
