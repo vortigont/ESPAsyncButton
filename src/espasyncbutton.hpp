@@ -101,13 +101,12 @@ namespace ESPButton {
    * @tparam T 
    */
   template <class T>
-  class MatchEventCallback : public std::unary_function<T, bool>{
+  struct MatchEventCallback {
       int32_t _gpio;
       uint32_t _menu;
 
-  public:
       explicit MatchEventCallback(uint32_t gpio, uint32_t menu) : _gpio(gpio), _menu(menu) {}
-      bool operator() ( T val ){
+      constexpr bool operator() ( T val ) const {
           // T is struct EventCallback
           return val.gpio == _gpio && val.menulvl == _menu;
       }
