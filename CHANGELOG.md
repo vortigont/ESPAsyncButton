@@ -1,5 +1,9 @@
 # Change Log
 
+## release v1.2.2
+_other_
+  silense some compiller warning in C++17
+
 ## release v1.2.1
 _new features:_
   add PseudoRotaryEncoder::enable, PseudoRotaryEncoder::disable calls
